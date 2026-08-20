@@ -1,0 +1,5 @@
+# Environment variables - never commit this!
+.env
+__pycache__/
+*.pyc
+*.pkl

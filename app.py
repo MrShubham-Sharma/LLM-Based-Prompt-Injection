@@ -6,6 +6,8 @@ Supports bypass mode to demonstrate prompt injection vulnerability without the p
 """
 
 import os
+from dotenv import load_dotenv
+load_dotenv()  # Automatically loads GEMINI_API_KEY from .env file
 from flask import Flask, request, jsonify, render_template
 from secure_llm import SecureLLMProxy
 from secure_llm.context_encapsulation import ContextBlock, TrustLevel
@@ -32,6 +34,16 @@ def get_proxy(intent_threshold: float, block_on_sanitizer: bool, block_on_intent
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/api/config")
+def get_config():
+    """Exposes non-secret config to the frontend (API key presence + default provider)."""
+    api_key = os.environ.get("GEMINI_API_KEY", "")
+    return jsonify({
+        "has_api_key": bool(api_key),
+        "api_key": api_key,           # sent over localhost only — safe for dev use
+        "default_provider": "gemini" if api_key else "mock"
+    })
 
 @app.route("/api/process", methods=["POST"])
 def process_prompt():

@@ -46,6 +46,19 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // Auto-fill API key and provider from backend .env on page load
+    fetch("/api/config")
+        .then(r => r.json())
+        .then(config => {
+            if (config.has_api_key) {
+                apiKeyInput.value = config.api_key;
+                providerSelect.value = "gemini";
+                apiKeyContainer.style.display = "block";
+                document.getElementById("model-badge").innerText = "Gemini 1.5 Flash";
+            }
+        })
+        .catch(() => {}); // silently fail if config endpoint unreachable
+
     // Toggle Tool Context fields
     btnToggleTool.addEventListener("click", () => {
         isToolOpen = !isToolOpen;
