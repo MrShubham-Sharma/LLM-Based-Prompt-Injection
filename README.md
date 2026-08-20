@@ -1,1 +1,1 @@
-# Secure-LLM-aganst-Prompt-Injection
+# Secure-LLM-against-Prompt-Injection
