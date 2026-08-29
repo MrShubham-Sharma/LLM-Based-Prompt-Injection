@@ -58,7 +58,7 @@ def process_prompt():
     block_on_intent = bool(data.get("block_on_intent", True))
     
     provider = data.get("provider", "mock")
-    model = data.get("model", "gemini-1.5-flash")
+    model = data.get("model", "gemini-2.5-flash")
     api_key = data.get("api_key") or os.environ.get("GEMINI_API_KEY")
     
     bypass_proxy = bool(data.get("bypass_proxy", False))

@@ -21,7 +21,7 @@ MOCK_SYSTEM_RULES = (
 def call_gemini_api(
     prompt: str,
     api_key: str,
-    model: str = "gemini-1.5-flash",
+    model: str = "gemini-2.5-flash",
     system_instruction: Optional[str] = None
 ) -> str:
     """
@@ -146,7 +146,7 @@ def generate_llm_response(
     prompt: str,
     api_key: Optional[str] = None,
     provider: str = "gemini",
-    model: str = "gemini-1.5-flash",
+    model: str = "gemini-2.5-flash",
     system_instruction: Optional[str] = None
 ) -> str:
     """
