@@ -1,84 +1,78 @@
+/**
+ * SecureLLM AI — Dashboard & Background Defense Controller
+ *
+ * Runs all 3 defense layers (Sanitizer, ML Intent Classifier, Context Encapsulation)
+ * seamlessly in the background while providing a clean conversational AI interface.
+ */
+
 document.addEventListener("DOMContentLoaded", () => {
-    // DOM Elements
+    // --- State ---
+    const telemetryHistory = [];
+    let activeTelemetryIndex = -1;
+    let isProcessing = false;
+
+    // --- DOM Elements ---
+    const chatMessages = document.getElementById("chat-messages");
+    const welcomeCard = document.getElementById("welcome-card");
+    const userInput = document.getElementById("user-input");
+    const btnSend = document.getElementById("btn-send");
     const providerSelect = document.getElementById("provider-select");
-    const apiKeyContainer = document.getElementById("api-key-container");
+    const apiKeyInline = document.getElementById("api-key-inline");
     const apiKeyInput = document.getElementById("api-key");
+    const toggleBypass = document.getElementById("toggle-bypass");
+    const btnClearChat = document.getElementById("btn-clear-chat");
+
+    // Context & Rules Modal Elements
+    const btnOpenConfig = document.getElementById("btn-open-config");
+    const btnCloseConfig = document.getElementById("btn-close-config");
+    const configModal = document.getElementById("config-modal");
+    const configModalOverlay = document.getElementById("config-modal-overlay");
+    const btnSaveConfig = document.getElementById("btn-save-config");
     const systemRulesInput = document.getElementById("system-rules");
-    const userPromptInput = document.getElementById("user-input");
-    
-    const btnToggleTool = document.getElementById("btn-toggle-tool");
-    const toolContainer = document.getElementById("tool-container");
     const toolSourceInput = document.getElementById("tool-source");
     const toolContentInput = document.getElementById("tool-content");
-    
     const sliderThreshold = document.getElementById("slider-threshold");
     const valThreshold = document.getElementById("val-threshold");
-    
     const toggleSanitizer = document.getElementById("toggle-sanitizer");
     const toggleIntent = document.getElementById("toggle-intent");
-    
-    const btnProcess = document.getElementById("btn-process");
-    const btnBypass = document.getElementById("btn-bypass");
-    const btnCopyPrompt = document.getElementById("btn-copy-prompt");
-    
-    const pipelineStatusBadge = document.getElementById("pipeline-overall-status");
+
+    // Attached Context Banner
+    const attachedContextBanner = document.getElementById("attached-context-banner");
+    const attachedSourceName = document.getElementById("attached-source-name");
+    const btnRemoveContext = document.getElementById("btn-remove-context");
+
+    // Inspector Drawer Elements
+    const btnOpenInspector = document.getElementById("btn-open-inspector");
+    const btnCloseInspector = document.getElementById("btn-close-inspector");
+    const inspectorDrawer = document.getElementById("inspector-drawer");
+    const inspectorOverlay = document.getElementById("inspector-overlay");
+    const telemetryBadgeCount = document.getElementById("telemetry-badge-count");
+    const inspectorPromptPreview = document.getElementById("inspector-prompt-preview");
+    const inspectorOverallBadge = document.getElementById("inspector-overall-badge");
+
+    // Step Telemetry Elements
+    const statusStep1 = document.getElementById("status-step-1");
+    const step1StatusText = document.getElementById("step1-status-text");
+    const step1FindingsCount = document.getElementById("step1-findings-count");
+    const step1FindingsList = document.getElementById("step1-findings-list");
+    const step1CleanedText = document.getElementById("step1-cleaned-text");
+
+    const statusStep2 = document.getElementById("status-step-2");
+    const step2ScoreVal = document.getElementById("step2-score-val");
+    const step2ScoreBar = document.getElementById("step2-score-bar");
+    const step2LabelText = document.getElementById("step2-label-text");
+    const step2ConfText = document.getElementById("step2-conf-text");
+    const step2ThresholdNote = document.getElementById("step2-threshold-note");
+
+    const statusStep3 = document.getElementById("status-step-3");
+    const step3FinalPrompt = document.getElementById("step3-final-prompt");
+    const btnCopyFinalPrompt = document.getElementById("btn-copy-final-prompt");
+
+    const auditList = document.getElementById("audit-list");
+    const auditCount = document.getElementById("audit-count");
     const toast = document.getElementById("toast");
-    
-    // Timeline steps DOM
-    const steps = {
-        sanitizer: document.getElementById("step-sanitizer"),
-        intent: document.getElementById("step-intent"),
-        encapsulation: document.getElementById("step-encapsulation"),
-        llm: document.getElementById("step-llm")
-    };
-    
-    let isToolOpen = false;
-    let finalPromptToCopy = "";
 
-    // Show/Hide API Key field based on provider select
-    providerSelect.addEventListener("change", () => {
-        if (providerSelect.value === "gemini") {
-            apiKeyContainer.style.display = "block";
-            document.getElementById("model-badge").innerText = "Gemini 1.5 Flash";
-        } else {
-            apiKeyContainer.style.display = "none";
-            document.getElementById("model-badge").innerText = "Local Mock Model";
-        }
-    });
-
-    // Auto-fill API key and provider from backend .env on page load
-    fetch("/api/config")
-        .then(r => r.json())
-        .then(config => {
-            if (config.has_api_key) {
-                apiKeyInput.value = config.api_key;
-                providerSelect.value = "gemini";
-                apiKeyContainer.style.display = "block";
-                document.getElementById("model-badge").innerText = "Gemini 1.5 Flash";
-            }
-        })
-        .catch(() => {}); // silently fail if config endpoint unreachable
-
-    // Toggle Tool Context fields
-    btnToggleTool.addEventListener("click", () => {
-        isToolOpen = !isToolOpen;
-        if (isToolOpen) {
-            toolContainer.style.display = "block";
-            btnToggleTool.innerHTML = '<i class="fa-solid fa-minus"></i> Remove Tool Content';
-        } else {
-            toolContainer.style.display = "none";
-            toolSourceInput.value = "";
-            toolContentInput.value = "";
-            btnToggleTool.innerHTML = '<i class="fa-solid fa-plus"></i> Add Tool Content';
-        }
-    });
-
-    // Slider threshold value updater
-    sliderThreshold.addEventListener("input", () => {
-        valThreshold.innerText = parseFloat(sliderThreshold.value).toFixed(2);
-    });
-
-    // Templates and Chips configurations
+    // --- Templates & Injection Presets ---
     const templates = {
         "benign-order": {
             input: "Hi, can you help me track my order #4521?",
@@ -113,392 +107,567 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
-    // Chip click handlers
-    document.querySelectorAll(".chip").forEach(chip => {
+    // --- Initialization ---
+
+    // Load server config (Gemini API key presence)
+    fetch("/api/config")
+        .then(r => r.json())
+        .then(config => {
+            if (config.has_api_key) {
+                apiKeyInput.value = config.api_key;
+                providerSelect.value = "gemini";
+                apiKeyInline.style.display = "block";
+            }
+        })
+        .catch(() => {});
+
+    // Provider change handler
+    providerSelect.addEventListener("change", () => {
+        if (providerSelect.value === "gemini") {
+            apiKeyInline.style.display = "block";
+        } else {
+            apiKeyInline.style.display = "none";
+        }
+    });
+
+    // Slider threshold updater
+    sliderThreshold.addEventListener("input", () => {
+        valThreshold.innerText = parseFloat(sliderThreshold.value).toFixed(2);
+        step2ThresholdNote.innerText = `Configured threshold: ${parseFloat(sliderThreshold.value).toFixed(2)}`;
+    });
+
+    // Auto-expand textarea
+    userInput.addEventListener("input", () => {
+        userInput.style.height = "auto";
+        userInput.style.height = Math.min(userInput.scrollHeight, 140) + "px";
+    });
+
+    // Enter to send (Shift+Enter for new line)
+    userInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            handleSendPrompt();
+        }
+    });
+
+    btnSend.addEventListener("click", handleSendPrompt);
+
+    // --- Quick Test Chips Handlers ---
+    document.querySelectorAll(".test-chip").forEach(chip => {
         chip.addEventListener("click", () => {
-            const templateKey = chip.getAttribute("data-type");
-            const data = templates[templateKey];
+            const key = chip.getAttribute("data-type");
+            const data = templates[key];
             if (!data) return;
 
-            userPromptInput.value = data.input;
+            userInput.value = data.input;
+            userInput.style.height = "auto";
+            userInput.style.height = Math.min(userInput.scrollHeight, 140) + "px";
 
             if (data.tool) {
-                // Open and fill tool section
-                isToolOpen = true;
-                toolContainer.style.display = "block";
-                btnToggleTool.innerHTML = '<i class="fa-solid fa-minus"></i> Remove Tool Content';
                 toolSourceInput.value = data.tool.source;
                 toolContentInput.value = data.tool.content;
-            } else {
-                // Close tool section
-                isToolOpen = false;
-                toolContainer.style.display = "none";
-                toolSourceInput.value = "";
-                toolContentInput.value = "";
-                btnToggleTool.innerHTML = '<i class="fa-solid fa-plus"></i> Add Tool Content';
+                updateAttachedContextBanner();
+                showToast("Attached semi-trusted RAG context!");
             }
-            
-            // Add visual flash feedback
-            chip.style.transform = "scale(0.95)";
-            setTimeout(() => { chip.style.transform = "scale(1)"; }, 150);
+
+            userInput.focus();
         });
     });
 
-    // Copy prompt to clipboard
-    btnCopyPrompt.addEventListener("click", () => {
-        if (!finalPromptToCopy) return;
-        navigator.clipboard.writeText(finalPromptToCopy).then(() => {
-            showToast("Prompt copied to clipboard!");
-        });
+    // Context Banner updates
+    function updateAttachedContextBanner() {
+        if (toolContentInput.value.trim()) {
+            attachedSourceName.innerText = toolSourceInput.value.trim() || "Untrusted Tool Data";
+            attachedContextBanner.style.display = "flex";
+        } else {
+            attachedContextBanner.style.display = "none";
+        }
+    }
+
+    btnRemoveContext.addEventListener("click", () => {
+        toolSourceInput.value = "";
+        toolContentInput.value = "";
+        updateAttachedContextBanner();
+        showToast("Detached RAG tool context.");
     });
 
-    function showToast(message) {
-        toast.innerText = message;
-        toast.classList.add("show");
-        setTimeout(() => {
-            toast.classList.remove("show");
-        }, 2000);
+    // --- Modal Controls (Rules & Settings) ---
+    btnOpenConfig.addEventListener("click", () => {
+        configModal.classList.add("active");
+        configModalOverlay.classList.add("active");
+    });
+
+    function closeConfigModal() {
+        configModal.classList.remove("active");
+        configModalOverlay.classList.remove("active");
     }
 
-    // Reset all step elements visually
-    function resetPipelineUI() {
-        pipelineStatusBadge.className = "overall-badge badge-idle";
-        pipelineStatusBadge.innerText = "Processing...";
+    btnCloseConfig.addEventListener("click", closeConfigModal);
+    configModalOverlay.addEventListener("click", closeConfigModal);
 
-        // Reset each step class
-        Object.values(steps).forEach(step => {
-            step.className = "pipeline-step";
-            step.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Pending';
-            
-            // Don't hide the LLM terminal container itself, just its contents
-            if (step !== steps.llm) {
-                step.querySelector(".step-details").style.display = "none";
-            }
-        });
+    btnSaveConfig.addEventListener("click", () => {
+        updateAttachedContextBanner();
+        closeConfigModal();
+        showToast("Defense configuration saved!");
+    });
 
-        // Reset terminal details
-        const placeholder = steps.llm.querySelector(".terminal-placeholder");
-        const textDisplay = steps.llm.querySelector(".terminal-text");
-        const blockedDisplay = steps.llm.querySelector(".terminal-blocked");
+    // --- Drawer Controls (Security Telemetry) ---
+    function openInspector(index = -1) {
+        if (telemetryHistory.length === 0) {
+            showToast("No telemetry data yet. Send a prompt to screen!");
+        }
 
-        placeholder.style.display = "block";
-        placeholder.innerText = "Analyzing security layers...";
-        textDisplay.style.display = "none";
-        textDisplay.innerText = "";
-        blockedDisplay.style.display = "none";
+        if (index >= 0 && index < telemetryHistory.length) {
+            renderTelemetryDetails(index);
+        } else if (telemetryHistory.length > 0) {
+            renderTelemetryDetails(telemetryHistory.length - 1);
+        }
+
+        inspectorDrawer.classList.add("active");
+        inspectorOverlay.classList.add("active");
     }
 
-    // Main interaction executors
-    btnProcess.addEventListener("click", () => executePipeline(false));
-    btnBypass.addEventListener("click", () => executePipeline(true));
+    function closeInspector() {
+        inspectorDrawer.classList.remove("active");
+        inspectorOverlay.classList.remove("active");
+    }
 
-    async function executePipeline(bypassProxy = false) {
-        const userInput = userPromptInput.value.trim();
-        if (!userInput) {
-            showToast("Please enter a user message or select a template!");
+    btnOpenInspector.addEventListener("click", () => openInspector());
+    btnCloseInspector.addEventListener("click", closeInspector);
+    inspectorOverlay.addEventListener("click", closeInspector);
+
+    // Copy final prompt button in drawer
+    btnCopyFinalPrompt.addEventListener("click", () => {
+        const text = step3FinalPrompt.innerText;
+        if (text && text !== "-") {
+            navigator.clipboard.writeText(text).then(() => showToast("Constructed prompt copied!"));
+        }
+    });
+
+    // Clear Chat
+    btnClearChat.addEventListener("click", () => {
+        chatMessages.innerHTML = "";
+        chatMessages.appendChild(welcomeCard);
+        showToast("Chat cleared.");
+    });
+
+    // --- Main Prompt Execution Flow ---
+    async function handleSendPrompt() {
+        if (isProcessing) return;
+
+        const text = userInput.value.trim();
+        if (!text) {
+            showToast("Please enter a message to send.");
             return;
         }
 
-        // Form payload
-        const payload = {
-            system_rules: systemRulesInput.value,
-            user_input: userInput,
-            intent_threshold: parseFloat(sliderThreshold.value),
-            block_on_sanitizer: toggleSanitizer.checked,
-            block_on_intent: toggleIntent.checked,
-            provider: providerSelect.value,
-            api_key: apiKeyInput.value.trim(),
-            bypass_proxy: bypassProxy,
-            tool_context: []
-        };
+        const isBypass = toggleBypass.checked;
+        const systemRules = systemRulesInput.value.trim();
+        const provider = providerSelect.value;
+        const apiKey = apiKeyInput.value.trim();
+        const threshold = parseFloat(sliderThreshold.value);
+        const runSanitizer = toggleSanitizer.checked;
+        const runIntent = toggleIntent.checked;
 
-        if (isToolOpen && toolContentInput.value.trim()) {
-            payload.tool_context.push({
+        const toolContext = [];
+        if (toolContentInput.value.trim()) {
+            toolContext.push({
                 source: toolSourceInput.value.trim() || "unspecified",
                 content: toolContentInput.value.trim()
             });
         }
 
-        // UI Reset
-        resetPipelineUI();
-        btnProcess.disabled = true;
-        btnBypass.disabled = true;
+        // Hide welcome card if present
+        if (welcomeCard && welcomeCard.parentElement === chatMessages) {
+            welcomeCard.remove();
+        }
+
+        // Render User Message
+        appendUserMessage(text);
+        userInput.value = "";
+        userInput.style.height = "24px";
+
+        // Render Assistant Loading Bubble
+        const loadingBubble = appendLoadingBubble();
+        isProcessing = true;
+        btnSend.disabled = true;
+
+        const payload = {
+            system_rules: systemRules,
+            user_input: text,
+            intent_threshold: threshold,
+            block_on_sanitizer: runSanitizer,
+            block_on_intent: runIntent,
+            provider: provider,
+            api_key: apiKey,
+            bypass_proxy: isBypass,
+            tool_context: toolContext
+        };
+
+        const startTime = Date.now();
 
         try {
             const response = await fetch("/api/process", {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
             });
 
             if (!response.ok) {
-                throw new Error("HTTP request failed");
+                throw new Error(`Server returned HTTP ${response.status}`);
             }
 
-            const result = await response.json();
-            
-            // Animated step-by-step presentation for a high-fidelity visual experience
-            await renderPipelineSteps(result, bypassProxy);
+            const data = await response.json();
+            const durationMs = Date.now() - startTime;
+
+            // Record into background telemetry store
+            const telemetryRecord = {
+                timestamp: new Date().toLocaleTimeString(),
+                userInput: text,
+                payload: payload,
+                result: data,
+                durationMs: durationMs,
+                bypass: isBypass
+            };
+
+            telemetryHistory.push(telemetryRecord);
+            activeTelemetryIndex = telemetryHistory.length - 1;
+            telemetryBadgeCount.innerText = telemetryHistory.length;
+
+            // Remove loading bubble
+            loadingBubble.remove();
+
+            // Render Output based on Allowed or Blocked
+            if (data.allowed) {
+                appendAssistantMessage(data.llm_response, telemetryRecord, activeTelemetryIndex);
+            } else {
+                appendBlockedMessage(data.reason, telemetryRecord, activeTelemetryIndex);
+            }
+
+            // Update Background Audit list in drawer
+            updateAuditList();
 
         } catch (error) {
-            console.error("Pipeline execution failed:", error);
-            pipelineStatusBadge.className = "overall-badge badge-blocked";
-            pipelineStatusBadge.innerText = "Error";
-            
-            const placeholder = steps.llm.querySelector(".terminal-placeholder");
-            placeholder.style.display = "block";
-            placeholder.innerText = "Pipeline error: " + error.message;
+            console.error("Execution error:", error);
+            loadingBubble.remove();
+            appendErrorMessage(error.message);
         } finally {
-            btnProcess.disabled = false;
-            btnBypass.disabled = false;
+            isProcessing = false;
+            btnSend.disabled = false;
         }
     }
 
-    // Visual sequence rendering
-    function sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+    // --- Message Appenders ---
+
+    function appendUserMessage(text) {
+        const row = document.createElement("div");
+        row.className = "message-row message-user";
+        row.innerHTML = `
+            <div class="message-avatar avatar-user">
+                <i class="fa-solid fa-user"></i>
+            </div>
+            <div class="message-bubble">
+                <div class="message-text">${escapeHtml(text)}</div>
+            </div>
+        `;
+        chatMessages.appendChild(row);
+        scrollToBottom();
     }
 
-    async function renderPipelineSteps(data, bypassed = false) {
-        const delay = 600; // Duration between step activations
+    function appendLoadingBubble() {
+        const row = document.createElement("div");
+        row.className = "message-row message-assistant";
+        row.innerHTML = `
+            <div class="message-avatar avatar-assistant">
+                <i class="fa-solid fa-shield-halved pulsing"></i>
+            </div>
+            <div class="message-bubble">
+                <div class="message-text" style="color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-circle-notch fa-spin"></i> Screening 3 background layers & querying model...
+                </div>
+            </div>
+        `;
+        chatMessages.appendChild(row);
+        scrollToBottom();
+        return row;
+    }
 
-        if (bypassed) {
-            // --- Bypass flow presentation ---
-            pipelineStatusBadge.className = "overall-badge badge-bypassed";
-            pipelineStatusBadge.innerText = "Proxy Bypassed";
+    function appendAssistantMessage(responseText, record, recordIndex) {
+        const row = document.createElement("div");
+        row.className = "message-row message-assistant";
 
-            // Layer 1: Sanitizer (Bypassed)
-            steps.sanitizer.className = "pipeline-step step-bypassed";
-            steps.sanitizer.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-circle-minus"></i> Bypassed';
-            steps.sanitizer.querySelector(".step-details").style.display = "block";
-            steps.sanitizer.querySelector(".findings-list").innerHTML = '<p class="encaps-desc text-warning"><i class="fa-solid fa-triangle-exclamation"></i> Security checks were bypassed. Raw input dispatched directly.</p>';
-            steps.sanitizer.querySelector(".cleaned-code").innerText = data.sanitizer.cleaned_text;
+        const intentScore = (record.result.intent && record.result.intent.adversarial_score !== undefined)
+            ? (record.result.intent.adversarial_score * 100).toFixed(1) + "% threat"
+            : "ML checked";
 
-            await sleep(delay);
+        const badgeHtml = record.bypass
+            ? `
+                <div class="bg-security-badge">
+                    <span class="badge-left bypassed"><i class="fa-solid fa-triangle-exclamation"></i> Proxy Bypassed (Direct Vulnerable Mode)</span>
+                    <button class="btn-inspect-link" data-index="${recordIndex}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Inspect</button>
+                </div>
+            `
+            : `
+                <div class="bg-security-badge">
+                    <span class="badge-left"><i class="fa-solid fa-shield-check"></i> Background Verified (3 Layers Passed • ${intentScore})</span>
+                    <button class="btn-inspect-link" data-index="${recordIndex}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Inspect Telemetry</button>
+                </div>
+            `;
 
-            // Layer 3: Intent Classifier (Bypassed)
-            steps.intent.className = "pipeline-step step-bypassed";
-            steps.intent.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-circle-minus"></i> Bypassed';
-            steps.intent.querySelector(".step-details").style.display = "block";
-            steps.intent.querySelector(".score-bar").style.width = "0%";
-            steps.intent.querySelector(".score-pct").innerText = "N/A";
-            steps.intent.querySelector(".model-note").innerText = "Intent check bypassed.";
+        row.innerHTML = `
+            <div class="message-avatar avatar-assistant">
+                <i class="fa-solid fa-robot"></i>
+            </div>
+            <div class="message-bubble">
+                <div class="message-text">${escapeHtml(responseText || "(Empty response received)")}</div>
+                ${badgeHtml}
+            </div>
+        `;
 
-            await sleep(delay);
-
-            // Layer 2: Context Encapsulation (Bypassed)
-            steps.encapsulation.className = "pipeline-step step-bypassed";
-            steps.encapsulation.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-circle-minus"></i> Bypassed';
-            steps.encapsulation.querySelector(".step-details").style.display = "block";
-            steps.encapsulation.querySelector(".final-prompt-code").innerText = data.final_prompt;
-            finalPromptToCopy = data.final_prompt;
-
-            await sleep(delay);
-
-            // LLM Response (Dispatched Raw)
-            steps.llm.className = "pipeline-step step-active";
-            steps.llm.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Dispatched';
-            steps.llm.querySelector(".terminal-placeholder").style.display = "none";
-            
-            const textDisplay = steps.llm.querySelector(".terminal-text");
-            textDisplay.style.display = "block";
-            await typeWrite(textDisplay, data.llm_response);
-            
-            steps.llm.className = "pipeline-step step-allowed";
-            steps.llm.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-circle-check"></i> Completed';
-            return;
+        // Wire up inspect button
+        const inspectBtn = row.querySelector(".btn-inspect-link");
+        if (inspectBtn) {
+            inspectBtn.addEventListener("click", () => {
+                const idx = parseInt(inspectBtn.getAttribute("data-index"), 10);
+                openInspector(idx);
+            });
         }
 
-        // --- Secure active flow presentation ---
+        chatMessages.appendChild(row);
+        scrollToBottom();
+    }
+
+    function appendBlockedMessage(reason, record, recordIndex) {
+        const row = document.createElement("div");
+        row.className = "message-row message-assistant";
+        row.innerHTML = `
+            <div class="message-avatar avatar-blocked">
+                <i class="fa-solid fa-ban"></i>
+            </div>
+            <div class="message-bubble blocked-card">
+                <div class="blocked-header">
+                    <i class="fa-solid fa-shield-halved"></i> Threat Neutralized in Background
+                </div>
+                <div class="blocked-reason-text">${escapeHtml(reason || "Malicious injection pattern detected.")}</div>
+                <button class="btn-inspect-blocked" data-index="${recordIndex}">
+                    <i class="fa-solid fa-microchip"></i> Inspect Background Defense Telemetry
+                </button>
+            </div>
+        `;
+
+        const inspectBtn = row.querySelector(".btn-inspect-blocked");
+        if (inspectBtn) {
+            inspectBtn.addEventListener("click", () => {
+                const idx = parseInt(inspectBtn.getAttribute("data-index"), 10);
+                openInspector(idx);
+            });
+        }
+
+        chatMessages.appendChild(row);
+        scrollToBottom();
+    }
+
+    function appendErrorMessage(errorMsg) {
+        const row = document.createElement("div");
+        row.className = "message-row message-assistant";
+        row.innerHTML = `
+            <div class="message-avatar avatar-blocked">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div class="message-bubble" style="border-color: var(--accent-red);">
+                <div class="message-text" style="color: var(--accent-red);">
+                    <strong>Error:</strong> ${escapeHtml(errorMsg)}
+                </div>
+            </div>
+        `;
+        chatMessages.appendChild(row);
+        scrollToBottom();
+    }
+
+    function scrollToBottom() {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    // --- Telemetry Diagnostics Rendering ---
+    function renderTelemetryDetails(index) {
+        if (index < 0 || index >= telemetryHistory.length) return;
+
+        activeTelemetryIndex = index;
+        const record = telemetryHistory[index];
+        const res = record.result;
+
+        // Session Preview
+        inspectorPromptPreview.innerText = record.userInput;
+
+        // Overall Badge
+        if (record.bypass) {
+            inspectorOverallBadge.innerHTML = `<span class="status-badge badge-bypassed">Bypassed</span>`;
+        } else if (res.allowed) {
+            inspectorOverallBadge.innerHTML = `<span class="status-badge badge-passed"><i class="fa-solid fa-check"></i> Allowed (${record.durationMs}ms)</span>`;
+        } else {
+            inspectorOverallBadge.innerHTML = `<span class="status-badge badge-blocked"><i class="fa-solid fa-ban"></i> Blocked (${record.durationMs}ms)</span>`;
+        }
 
         // ==========================================
         // 1. LAYER 1: SANITIZER
         // ==========================================
-        steps.sanitizer.className = "pipeline-step step-active";
-        steps.sanitizer.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-magnifying-glass pulsing"></i> Scanning...';
-        await sleep(delay + 200);
-
-        const sanitizerFindings = data.sanitizer.findings;
-        const sanitizerBlocked = data.sanitizer.blocked;
-        const sanitizerCleaned = data.sanitizer.cleaned_text;
-
-        steps.sanitizer.querySelector(".step-details").style.display = "block";
-        steps.sanitizer.querySelector(".cleaned-code").innerText = sanitizerCleaned;
-
-        const findingsDiv = steps.sanitizer.querySelector(".findings-list");
-        if (sanitizerFindings.length === 0) {
-            findingsDiv.innerHTML = '<p class="encaps-desc text-success" style="color: var(--accent-green);"><i class="fa-solid fa-circle-check"></i> Clean. No known malicious patterns matched.</p>';
-            steps.sanitizer.className = "pipeline-step step-allowed";
-            steps.sanitizer.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-circle-check"></i> Passed';
-        } else {
-            let tableHtml = `
-                <table class="findings-table">
-                    <thead>
-                        <tr>
-                            <th>Rule Checked</th>
-                            <th>Severity</th>
-                            <th>Matched Text</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-            sanitizerFindings.forEach(f => {
-                tableHtml += `
-                    <tr>
-                        <td class="rule-name-text">${f.rule_name}</td>
-                        <td><span class="severity-pill sev-${f.severity}">${f.severity}</span></td>
-                        <td><code class="code-font">${escapeHtml(f.matched_text)}</code></td>
-                    </tr>
-                `;
-            });
-            tableHtml += `</tbody></table>`;
-            findingsDiv.innerHTML = tableHtml;
-
-            if (sanitizerBlocked) {
-                steps.sanitizer.className = "pipeline-step step-blocked";
-                steps.sanitizer.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-circle-xmark"></i> Triggered Block';
-                
-                // Halts sequence
-                handleBlockEnd("Blocked by Layer 1 (Input Sanitizer)");
-                return;
+        const san = res.sanitizer;
+        if (record.bypass) {
+            statusStep1.innerHTML = `<span class="badge-sub badge-pending">Bypassed</span>`;
+            step1StatusText.innerText = "Bypassed";
+            step1FindingsCount.innerText = "0";
+            step1FindingsList.innerHTML = `<p class="muted-note text-warning">Input sanitizer was skipped in bypass mode.</p>`;
+            step1CleanedText.innerText = record.userInput;
+        } else if (san) {
+            if (san.blocked) {
+                statusStep1.innerHTML = `<span class="badge-sub badge-blocked">Blocked</span>`;
+                step1StatusText.innerText = "Blocked (Threat Detected)";
+            } else if (san.findings && san.findings.length > 0) {
+                statusStep1.innerHTML = `<span class="badge-sub" style="background: rgba(255,214,0,0.15); color: var(--accent-yellow);">Warnings</span>`;
+                step1StatusText.innerText = "Flagged Warnings";
             } else {
-                steps.sanitizer.className = "pipeline-step step-allowed";
-                steps.sanitizer.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="color: var(--accent-yellow);"></i> Warnings Flagged';
+                statusStep1.innerHTML = `<span class="badge-sub badge-passed">Passed</span>`;
+                step1StatusText.innerText = "Clean (Passed)";
+            }
+
+            step1FindingsCount.innerText = (san.findings ? san.findings.length : 0);
+            step1CleanedText.innerText = san.cleaned_text || "-";
+
+            if (san.findings && san.findings.length > 0) {
+                let tableHtml = `
+                    <table class="findings-table">
+                        <thead>
+                            <tr>
+                                <th>Rule</th>
+                                <th>Severity</th>
+                                <th>Matched Pattern</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                san.findings.forEach(f => {
+                    tableHtml += `
+                        <tr>
+                            <td>${escapeHtml(f.rule_name)}</td>
+                            <td><span class="sev-${escapeHtml(f.severity)}">${escapeHtml(f.severity)}</span></td>
+                            <td><code>${escapeHtml(f.matched_text)}</code></td>
+                        </tr>
+                    `;
+                });
+                tableHtml += `</tbody></table>`;
+                step1FindingsList.innerHTML = tableHtml;
+            } else {
+                step1FindingsList.innerHTML = `<p class="muted-note text-success"><i class="fa-solid fa-circle-check"></i> No malicious regex heuristics triggered.</p>`;
             }
         }
 
-        await sleep(delay);
-
         // ==========================================
-        // 2. LAYER 3: INTENT CLASSIFIER
+        // 2. LAYER 2: INTENT CLASSIFIER
         // ==========================================
-        if (!toggleIntent.checked) {
-            steps.intent.className = "pipeline-step step-bypassed";
-            steps.intent.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-circle-minus"></i> Disabled';
-        } else {
-            steps.intent.className = "pipeline-step step-active";
-            steps.intent.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-brain pulsing"></i> Classifying...';
-            await sleep(delay + 300);
-
-            const score = data.intent.adversarial_score;
-            const scorePctStr = (score * 100).toFixed(1) + "%";
-            const isAdversarial = data.intent.label === "adversarial";
-
-            steps.intent.querySelector(".step-details").style.display = "block";
-            const scoreBar = steps.intent.querySelector(".score-bar");
-            scoreBar.style.width = scorePctStr;
-            steps.intent.querySelector(".score-pct").innerText = scorePctStr;
+        const intent = res.intent;
+        if (record.bypass) {
+            statusStep2.innerHTML = `<span class="badge-sub badge-pending">Bypassed</span>`;
+            step2ScoreVal.innerText = "N/A";
+            step2ScoreBar.style.width = "0%";
+            step2LabelText.innerText = "Bypassed";
+            step2ConfText.innerText = "N/A";
+        } else if (intent) {
+            const score = intent.adversarial_score || 0;
+            const pct = (score * 100).toFixed(1);
+            step2ScoreVal.innerText = `${pct}%`;
+            step2ScoreBar.style.width = `${pct}%`;
 
             if (score > 0.7) {
-                scoreBar.style.backgroundColor = "var(--accent-red)";
+                step2ScoreBar.style.backgroundColor = "var(--accent-red)";
             } else if (score > 0.45) {
-                scoreBar.style.backgroundColor = "var(--accent-yellow)";
+                step2ScoreBar.style.backgroundColor = "var(--accent-yellow)";
             } else {
-                scoreBar.style.backgroundColor = "var(--accent-green)";
+                step2ScoreBar.style.backgroundColor = "var(--accent-green)";
             }
 
-            steps.intent.querySelector(".model-note").innerText = `Classification: ${data.intent.label.toUpperCase()} (confidence: ${(data.intent.confidence * 100).toFixed(1)}%)`;
-
-            if (isAdversarial && toggleIntent.checked) {
-                steps.intent.className = "pipeline-step step-blocked";
-                steps.intent.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-circle-xmark"></i> Triggered Block';
-                
-                // Halts sequence
-                handleBlockEnd("Blocked by Layer 3 (Intent Classifier)");
-                return;
+            if (intent.label === "adversarial") {
+                statusStep2.innerHTML = `<span class="badge-sub badge-blocked">Threat</span>`;
             } else {
-                steps.intent.className = "pipeline-step step-allowed";
-                steps.intent.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-circle-check"></i> Passed';
+                statusStep2.innerHTML = `<span class="badge-sub badge-passed">Benign</span>`;
             }
+
+            step2LabelText.innerText = (intent.label || "benign").toUpperCase();
+            step2ConfText.innerText = `${((intent.confidence || 0) * 100).toFixed(1)}%`;
+        } else {
+            statusStep2.innerHTML = `<span class="badge-sub badge-pending">Skipped</span>`;
+            step2ScoreVal.innerText = "0.0%";
+            step2ScoreBar.style.width = "0%";
+            step2LabelText.innerText = "Skipped (Layer 1 blocked)";
+            step2ConfText.innerText = "-";
         }
 
-        await sleep(delay);
-
         // ==========================================
-        // 3. LAYER 2: CONTEXT ENCAPSULATION
+        // 3. LAYER 3: CONTEXT ENCAPSULATION
         // ==========================================
-        steps.encapsulation.className = "pipeline-step step-active";
-        steps.encapsulation.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-box-archive pulsing"></i> Isolating...';
-        await sleep(delay);
-
-        steps.encapsulation.className = "pipeline-step step-allowed";
-        steps.encapsulation.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-circle-check"></i> Protected';
-        steps.encapsulation.querySelector(".step-details").style.display = "block";
-        steps.encapsulation.querySelector(".final-prompt-code").innerText = data.final_prompt;
-        finalPromptToCopy = data.final_prompt;
-
-        await sleep(delay);
-
-        // ==========================================
-        // 4. LLM GENERATION
-        // ==========================================
-        steps.llm.className = "pipeline-step step-active";
-        steps.llm.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Dispatched';
-        steps.llm.querySelector(".terminal-placeholder").style.display = "none";
-        
-        pipelineStatusBadge.className = "overall-badge badge-allowed";
-        pipelineStatusBadge.innerText = "Secured & Allowed";
-
-        const textDisplay = steps.llm.querySelector(".terminal-text");
-        textDisplay.style.display = "block";
-        await typeWrite(textDisplay, data.llm_response);
-
-        steps.llm.className = "pipeline-step step-allowed";
-        steps.llm.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-circle-check"></i> Completed';
+        if (record.bypass) {
+            statusStep3.innerHTML = `<span class="badge-sub badge-pending">Raw Prompt</span>`;
+            step3FinalPrompt.innerText = res.final_prompt || "-";
+        } else if (res.allowed) {
+            statusStep3.innerHTML = `<span class="badge-sub badge-passed">Encapsulated</span>`;
+            step3FinalPrompt.innerText = res.final_prompt || "-";
+        } else {
+            statusStep3.innerHTML = `<span class="badge-sub badge-pending">Aborted</span>`;
+            step3FinalPrompt.innerText = "(Dispatch aborted due to threat block)";
+        }
     }
 
-    // Block termination view helper
-    function handleBlockEnd(reason) {
-        pipelineStatusBadge.className = "overall-badge badge-blocked";
-        pipelineStatusBadge.innerText = "Malicious Threat Blocked";
-
-        // Mute remaining steps
-        steps.encapsulation.className = "pipeline-step";
-        steps.encapsulation.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-circle-minus"></i> Aborted';
-        
-        steps.llm.className = "pipeline-step step-blocked";
-        steps.llm.querySelector(".step-status").innerHTML = '<i class="fa-solid fa-circle-xmark"></i> Blocked';
-        steps.llm.querySelector(".terminal-placeholder").style.display = "none";
-        
-        const blockedDisplay = steps.llm.querySelector(".terminal-blocked");
-        blockedDisplay.style.display = "block";
-        blockedDisplay.querySelector(".blocked-reason").innerText = reason;
-    }
-
-    // Typewriter print simulation
-    async function typeWrite(element, text) {
-        element.innerText = "";
-        if (!text) {
-            element.innerText = "(No response)";
+    function updateAuditList() {
+        if (telemetryHistory.length === 0) {
+            auditList.innerHTML = `<div class="audit-empty">No prompts processed in this session.</div>`;
+            auditCount.innerText = "0 requests";
             return;
         }
-        
-        // Fast typing
-        const charDelay = 12; 
-        const paragraphs = text.split('\n');
-        
-        for (let i = 0; i < text.length; i++) {
-            element.innerText += text[i];
-            
-            // Scroll to bottom as it types
-            element.parentElement.scrollTop = element.parentElement.scrollHeight;
-            
-            // Every few characters sleep briefly
-            if (i % 2 === 0) {
-                await sleep(charDelay);
+
+        auditCount.innerText = `${telemetryHistory.length} request${telemetryHistory.length > 1 ? "s" : ""}`;
+        auditList.innerHTML = "";
+
+        // Render in reverse order (newest first)
+        telemetryHistory.slice().reverse().forEach((rec, revIdx) => {
+            const actualIdx = telemetryHistory.length - 1 - revIdx;
+            const item = document.createElement("div");
+            item.className = "audit-item";
+            if (actualIdx === activeTelemetryIndex) {
+                item.style.borderColor = "var(--accent-cyan)";
             }
-        }
+
+            const badgeClass = rec.bypass ? "badge-bypassed" : (rec.result.allowed ? "badge-passed" : "badge-blocked");
+            const badgeLabel = rec.bypass ? "Bypass" : (rec.result.allowed ? "Passed" : "Blocked");
+
+            item.innerHTML = `
+                <div class="audit-item-left">
+                    <div class="audit-time">${rec.timestamp} • ${rec.durationMs}ms</div>
+                    <div class="audit-prompt">${escapeHtml(rec.userInput)}</div>
+                </div>
+                <span class="audit-badge ${badgeClass}">${badgeLabel}</span>
+            `;
+
+            item.addEventListener("click", () => {
+                renderTelemetryDetails(actualIdx);
+                updateAuditList();
+            });
+
+            auditList.appendChild(item);
+        });
     }
 
-    // String escape helper
+    function showToast(msg) {
+        toast.innerText = msg;
+        toast.classList.add("show");
+        setTimeout(() => toast.classList.remove("show"), 2200);
+    }
+
     function escapeHtml(unsafe) {
-        return unsafe
-             .replace(/&/g, "&amp;")
-             .replace(/</g, "&lt;")
-             .replace(/>/g, "&gt;")
-             .replace(/"/g, "&quot;")
-             .replace(/'/g, "&#039;");
+        if (!unsafe) return "";
+        return String(unsafe)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
 });
