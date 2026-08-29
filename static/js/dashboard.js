@@ -1,8 +1,13 @@
 /**
- * SecureLLM AI — Dashboard & Background Defense Controller
+ * SecureLLM AI — Real-Time Multi-LLM Dashboard & Background Defense Controller
  *
- * Runs all 3 defense layers (Sanitizer, ML Intent Classifier, Context Encapsulation)
- * seamlessly in the background while providing a clean conversational AI interface.
+ * Supports live real-time token streaming with:
+ * - Google Gemini (gemini-2.5-flash, gemini-1.5-flash, gemini-1.5-pro)
+ * - OpenAI GPT (gpt-4o, gpt-4o-mini, gpt-3.5-turbo)
+ * - Anthropic Claude (claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022, claude-3-haiku-20240307)
+ * - Local Mock Model (simulation)
+ *
+ * All prompts are verified across the 3 defense layers in the background before LLM generation.
  */
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -10,15 +15,22 @@ document.addEventListener("DOMContentLoaded", () => {
     const telemetryHistory = [];
     let activeTelemetryIndex = -1;
     let isProcessing = false;
+    let serverConfig = null;
 
     // --- DOM Elements ---
     const chatMessages = document.getElementById("chat-messages");
     const welcomeCard = document.getElementById("welcome-card");
     const userInput = document.getElementById("user-input");
     const btnSend = document.getElementById("btn-send");
+
+    // Provider & Model
     const providerSelect = document.getElementById("provider-select");
+    const modelSelect = document.getElementById("model-select");
     const apiKeyInline = document.getElementById("api-key-inline");
     const apiKeyInput = document.getElementById("api-key");
+    const btnToggleKey = document.getElementById("btn-toggle-key");
+    const activeLlmTag = document.getElementById("active-llm-tag");
+
     const toggleBypass = document.getElementById("toggle-bypass");
     const btnClearChat = document.getElementById("btn-clear-chat");
 
@@ -72,6 +84,26 @@ document.addEventListener("DOMContentLoaded", () => {
     const auditCount = document.getElementById("audit-count");
     const toast = document.getElementById("toast");
 
+    // Provider model mapping fallback
+    const providerModelDefaults = {
+        gemini: {
+            models: ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"],
+            placeholder: "Gemini API Key (AIzaSy...)"
+        },
+        openai: {
+            models: ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"],
+            placeholder: "OpenAI API Key (sk-...)"
+        },
+        claude: {
+            models: ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-haiku-20240307"],
+            placeholder: "Claude API Key (sk-ant-...)"
+        },
+        mock: {
+            models: ["mock-local"],
+            placeholder: "No API Key required"
+        }
+    };
+
     // --- Templates & Injection Presets ---
     const templates = {
         "benign-order": {
@@ -107,27 +139,72 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
-    // --- Initialization ---
+    // --- Initialization & Config Loading ---
 
-    // Load server config (Gemini API key presence)
     fetch("/api/config")
         .then(r => r.json())
-        .then(config => {
-            if (config.has_api_key) {
-                apiKeyInput.value = config.api_key;
-                providerSelect.value = "gemini";
-                apiKeyInline.style.display = "block";
+        .then(cfg => {
+            serverConfig = cfg;
+            if (cfg.default_provider) {
+                providerSelect.value = cfg.default_provider;
             }
+            updateProviderUI();
         })
-        .catch(() => {});
+        .catch(() => {
+            updateProviderUI();
+        });
 
-    // Provider change handler
-    providerSelect.addEventListener("change", () => {
-        if (providerSelect.value === "gemini") {
-            apiKeyInline.style.display = "block";
-        } else {
-            apiKeyInline.style.display = "none";
+    function updateProviderUI() {
+        const provider = providerSelect.value;
+        const info = (serverConfig && serverConfig.providers && serverConfig.providers[provider])
+            ? serverConfig.providers[provider]
+            : providerModelDefaults[provider] || providerModelDefaults.mock;
+
+        // Populate models dropdown
+        modelSelect.innerHTML = "";
+        const models = info.models || ["default"];
+        models.forEach(m => {
+            const opt = document.createElement("option");
+            opt.value = m;
+            opt.innerText = m;
+            modelSelect.appendChild(opt);
+        });
+
+        if (info.default_model) {
+            modelSelect.value = info.default_model;
         }
+
+        // Update API Key field
+        if (provider === "mock") {
+            apiKeyInline.style.display = "none";
+            apiKeyInput.value = "";
+            activeLlmTag.innerText = "Local Simulation";
+        } else {
+            apiKeyInline.style.display = "flex";
+            const placeholder = providerModelDefaults[provider]?.placeholder || "API Key...";
+            apiKeyInput.placeholder = placeholder;
+
+            // Auto-fill from server config if available
+            if (info.api_key) {
+                apiKeyInput.value = info.api_key;
+            } else {
+                apiKeyInput.value = "";
+            }
+
+            if (provider === "gemini") activeLlmTag.innerText = "Gemini Active";
+            else if (provider === "openai") activeLlmTag.innerText = "GPT Active";
+            else if (provider === "claude") activeLlmTag.innerText = "Claude Active";
+        }
+    }
+
+    providerSelect.addEventListener("change", updateProviderUI);
+
+    // Toggle API Key visibility
+    let keyVisible = false;
+    btnToggleKey.addEventListener("click", () => {
+        keyVisible = !keyVisible;
+        apiKeyInput.type = keyVisible ? "text" : "password";
+        btnToggleKey.innerHTML = keyVisible ? '<i class="fa-solid fa-eye-slash"></i>' : '<i class="fa-regular fa-eye"></i>';
     });
 
     // Slider threshold updater
@@ -174,7 +251,6 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
-    // Context Banner updates
     function updateAttachedContextBanner() {
         if (toolContentInput.value.trim()) {
             attachedSourceName.innerText = toolSourceInput.value.trim() || "Untrusted Tool Data";
@@ -236,7 +312,6 @@ document.addEventListener("DOMContentLoaded", () => {
     btnCloseInspector.addEventListener("click", closeInspector);
     inspectorOverlay.addEventListener("click", closeInspector);
 
-    // Copy final prompt button in drawer
     btnCopyFinalPrompt.addEventListener("click", () => {
         const text = step3FinalPrompt.innerText;
         if (text && text !== "-") {
@@ -244,14 +319,13 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
-    // Clear Chat
     btnClearChat.addEventListener("click", () => {
         chatMessages.innerHTML = "";
         chatMessages.appendChild(welcomeCard);
         showToast("Chat cleared.");
     });
 
-    // --- Main Prompt Execution Flow ---
+    // --- Real-Time Streaming Execution Flow ---
     async function handleSendPrompt() {
         if (isProcessing) return;
 
@@ -264,6 +338,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const isBypass = toggleBypass.checked;
         const systemRules = systemRulesInput.value.trim();
         const provider = providerSelect.value;
+        const model = modelSelect.value;
         const apiKey = apiKeyInput.value.trim();
         const threshold = parseFloat(sliderThreshold.value);
         const runSanitizer = toggleSanitizer.checked;
@@ -277,18 +352,20 @@ document.addEventListener("DOMContentLoaded", () => {
             });
         }
 
-        // Hide welcome card if present
         if (welcomeCard && welcomeCard.parentElement === chatMessages) {
             welcomeCard.remove();
         }
 
-        // Render User Message
+        // 1. Render User Message
         appendUserMessage(text);
         userInput.value = "";
         userInput.style.height = "24px";
 
-        // Render Assistant Loading Bubble
-        const loadingBubble = appendLoadingBubble();
+        // 2. Prepare Assistant Bubble for real-time streaming
+        const { messageRow, textElement, avatarElement, badgeContainer } = createStreamingAssistantRow(provider, model);
+        chatMessages.appendChild(messageRow);
+        scrollToBottom();
+
         isProcessing = true;
         btnSend.disabled = true;
 
@@ -299,65 +376,111 @@ document.addEventListener("DOMContentLoaded", () => {
             block_on_sanitizer: runSanitizer,
             block_on_intent: runIntent,
             provider: provider,
+            model: model,
             api_key: apiKey,
             bypass_proxy: isBypass,
             tool_context: toolContext
         };
 
         const startTime = Date.now();
+        let telemetryData = null;
+        let accumulatedText = "";
 
         try {
-            const response = await fetch("/api/process", {
+            const response = await fetch("/api/process/stream", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload)
             });
 
             if (!response.ok) {
-                throw new Error(`Server returned HTTP ${response.status}`);
+                throw new Error(`Server error HTTP ${response.status}`);
             }
 
-            const data = await response.json();
-            const durationMs = Date.now() - startTime;
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let buffer = "";
 
-            // Record into background telemetry store
-            const telemetryRecord = {
-                timestamp: new Date().toLocaleTimeString(),
-                userInput: text,
-                payload: payload,
-                result: data,
-                durationMs: durationMs,
-                bypass: isBypass
-            };
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
 
-            telemetryHistory.push(telemetryRecord);
-            activeTelemetryIndex = telemetryHistory.length - 1;
-            telemetryBadgeCount.innerText = telemetryHistory.length;
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split("\n\n");
+                buffer = lines.pop() || "";
 
-            // Remove loading bubble
-            loadingBubble.remove();
+                for (const chunk of lines) {
+                    if (!chunk.trim()) continue;
 
-            // Render Output based on Allowed or Blocked
-            if (data.allowed) {
-                appendAssistantMessage(data.llm_response, telemetryRecord, activeTelemetryIndex);
-            } else {
-                appendBlockedMessage(data.reason, telemetryRecord, activeTelemetryIndex);
+                    const eventMatch = chunk.match(/^event:\s*(\w+)/m);
+                    const dataMatch = chunk.match(/^data:\s*(.+)$/m);
+
+                    const eventName = eventMatch ? eventMatch[1] : "message";
+                    const dataPayload = dataMatch ? JSON.parse(dataMatch[1]) : {};
+
+                    if (eventName === "telemetry") {
+                        telemetryData = dataPayload;
+                        const durationMs = Date.now() - startTime;
+
+                        const record = {
+                            timestamp: new Date().toLocaleTimeString(),
+                            userInput: text,
+                            payload: payload,
+                            result: telemetryData,
+                            durationMs: durationMs,
+                            bypass: isBypass,
+                            provider: provider,
+                            model: model
+                        };
+
+                        telemetryHistory.push(record);
+                        activeTelemetryIndex = telemetryHistory.length - 1;
+                        telemetryBadgeCount.innerText = telemetryHistory.length;
+                        updateAuditList();
+
+                        // If blocked by background defense:
+                        if (!telemetryData.allowed) {
+                            textElement.classList.remove("cursor-blink");
+                            renderBlockedInPlace(messageRow, textElement, avatarElement, telemetryData.reason, activeTelemetryIndex);
+                            return;
+                        }
+
+                    } else if (eventName === "token") {
+                        // Live token received
+                        const chunkText = dataPayload.text || "";
+                        accumulatedText += chunkText;
+                        textElement.innerText = accumulatedText;
+                        scrollToBottom();
+
+                    } else if (eventName === "done") {
+                        // Streaming finished
+                        textElement.classList.remove("cursor-blink");
+                        if (dataPayload.full_text) {
+                            accumulatedText = dataPayload.full_text;
+                            textElement.innerText = accumulatedText;
+                        }
+
+                        if (telemetryData && telemetryData.allowed) {
+                            attachVerificationBadge(badgeContainer, telemetryData, activeTelemetryIndex, isBypass, provider, model);
+                        }
+                    }
+                }
             }
 
-            // Update Background Audit list in drawer
-            updateAuditList();
+            textElement.classList.remove("cursor-blink");
 
         } catch (error) {
-            console.error("Execution error:", error);
-            loadingBubble.remove();
-            appendErrorMessage(error.message);
+            console.error("Stream error:", error);
+            textElement.classList.remove("cursor-blink");
+            textElement.innerHTML = `<span style="color: var(--accent-red);"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${escapeHtml(error.message)}</span>`;
         } finally {
             isProcessing = false;
             btnSend.disabled = false;
+            scrollToBottom();
         }
     }
 
-    // --- Message Appenders ---
+    // --- Message Helpers ---
 
     function appendUserMessage(text) {
         const row = document.createElement("div");
@@ -374,114 +497,88 @@ document.addEventListener("DOMContentLoaded", () => {
         scrollToBottom();
     }
 
-    function appendLoadingBubble() {
+    function createStreamingAssistantRow(provider, model) {
         const row = document.createElement("div");
         row.className = "message-row message-assistant";
+
+        let avatarIcon = '<i class="fa-solid fa-robot"></i>';
+        if (provider === "gemini") avatarIcon = '<i class="fa-solid fa-sparkles"></i>';
+        else if (provider === "openai") avatarIcon = '<i class="fa-solid fa-bolt"></i>';
+        else if (provider === "claude") avatarIcon = '<i class="fa-solid fa-brain"></i>';
+
         row.innerHTML = `
             <div class="message-avatar avatar-assistant">
-                <i class="fa-solid fa-shield-halved pulsing"></i>
+                ${avatarIcon}
             </div>
             <div class="message-bubble">
-                <div class="message-text" style="color: var(--text-muted); display: flex; align-items: center; gap: 8px;">
-                    <i class="fa-solid fa-circle-notch fa-spin"></i> Screening 3 background layers & querying model...
-                </div>
+                <div class="message-text cursor-blink"></div>
+                <div class="badge-container"></div>
             </div>
         `;
-        chatMessages.appendChild(row);
-        scrollToBottom();
-        return row;
+
+        return {
+            messageRow: row,
+            textElement: row.querySelector(".message-text"),
+            avatarElement: row.querySelector(".message-avatar"),
+            badgeContainer: row.querySelector(".badge-container")
+        };
     }
 
-    function appendAssistantMessage(responseText, record, recordIndex) {
-        const row = document.createElement("div");
-        row.className = "message-row message-assistant";
-
-        const intentScore = (record.result.intent && record.result.intent.adversarial_score !== undefined)
-            ? (record.result.intent.adversarial_score * 100).toFixed(1) + "% threat"
+    function attachVerificationBadge(container, telemetry, recordIndex, isBypass, provider, model) {
+        const intentScore = (telemetry.intent && telemetry.intent.adversarial_score !== undefined)
+            ? (telemetry.intent.adversarial_score * 100).toFixed(1) + "% threat"
             : "ML checked";
 
-        const badgeHtml = record.bypass
+        const providerLabel = provider.toUpperCase() + ` (${model})`;
+
+        const badgeHtml = isBypass
             ? `
                 <div class="bg-security-badge">
-                    <span class="badge-left bypassed"><i class="fa-solid fa-triangle-exclamation"></i> Proxy Bypassed (Direct Vulnerable Mode)</span>
+                    <span class="badge-left bypassed"><i class="fa-solid fa-triangle-exclamation"></i> Proxy Bypassed (Direct Vulnerable Mode • ${providerLabel})</span>
                     <button class="btn-inspect-link" data-index="${recordIndex}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Inspect</button>
                 </div>
             `
             : `
                 <div class="bg-security-badge">
-                    <span class="badge-left"><i class="fa-solid fa-shield-check"></i> Background Verified (3 Layers Passed • ${intentScore})</span>
+                    <span class="badge-left"><i class="fa-solid fa-shield-check"></i> Background Verified (3 Layers Passed • ${intentScore} • ${providerLabel})</span>
                     <button class="btn-inspect-link" data-index="${recordIndex}"><i class="fa-solid fa-arrow-up-right-from-square"></i> Inspect Telemetry</button>
                 </div>
             `;
 
-        row.innerHTML = `
-            <div class="message-avatar avatar-assistant">
-                <i class="fa-solid fa-robot"></i>
-            </div>
-            <div class="message-bubble">
-                <div class="message-text">${escapeHtml(responseText || "(Empty response received)")}</div>
-                ${badgeHtml}
-            </div>
-        `;
+        container.innerHTML = badgeHtml;
 
-        // Wire up inspect button
-        const inspectBtn = row.querySelector(".btn-inspect-link");
+        const inspectBtn = container.querySelector(".btn-inspect-link");
         if (inspectBtn) {
             inspectBtn.addEventListener("click", () => {
                 const idx = parseInt(inspectBtn.getAttribute("data-index"), 10);
                 openInspector(idx);
             });
         }
-
-        chatMessages.appendChild(row);
-        scrollToBottom();
     }
 
-    function appendBlockedMessage(reason, record, recordIndex) {
-        const row = document.createElement("div");
-        row.className = "message-row message-assistant";
-        row.innerHTML = `
-            <div class="message-avatar avatar-blocked">
-                <i class="fa-solid fa-ban"></i>
+    function renderBlockedInPlace(row, textElement, avatarElement, reason, recordIndex) {
+        avatarElement.className = "message-avatar avatar-blocked";
+        avatarElement.innerHTML = '<i class="fa-solid fa-ban"></i>';
+
+        const bubble = row.querySelector(".message-bubble");
+        bubble.className = "message-bubble blocked-card";
+        bubble.innerHTML = `
+            <div class="blocked-header">
+                <i class="fa-solid fa-shield-halved"></i> Threat Neutralized in Background
             </div>
-            <div class="message-bubble blocked-card">
-                <div class="blocked-header">
-                    <i class="fa-solid fa-shield-halved"></i> Threat Neutralized in Background
-                </div>
-                <div class="blocked-reason-text">${escapeHtml(reason || "Malicious injection pattern detected.")}</div>
-                <button class="btn-inspect-blocked" data-index="${recordIndex}">
-                    <i class="fa-solid fa-microchip"></i> Inspect Background Defense Telemetry
-                </button>
-            </div>
+            <div class="blocked-reason-text">${escapeHtml(reason || "Malicious injection pattern detected.")}</div>
+            <button class="btn-inspect-blocked" data-index="${recordIndex}">
+                <i class="fa-solid fa-microchip"></i> Inspect Background Defense Telemetry
+            </button>
         `;
 
-        const inspectBtn = row.querySelector(".btn-inspect-blocked");
+        const inspectBtn = bubble.querySelector(".btn-inspect-blocked");
         if (inspectBtn) {
             inspectBtn.addEventListener("click", () => {
                 const idx = parseInt(inspectBtn.getAttribute("data-index"), 10);
                 openInspector(idx);
             });
         }
-
-        chatMessages.appendChild(row);
-        scrollToBottom();
-    }
-
-    function appendErrorMessage(errorMsg) {
-        const row = document.createElement("div");
-        row.className = "message-row message-assistant";
-        row.innerHTML = `
-            <div class="message-avatar avatar-blocked">
-                <i class="fa-solid fa-triangle-exclamation"></i>
-            </div>
-            <div class="message-bubble" style="border-color: var(--accent-red);">
-                <div class="message-text" style="color: var(--accent-red);">
-                    <strong>Error:</strong> ${escapeHtml(errorMsg)}
-                </div>
-            </div>
-        `;
-        chatMessages.appendChild(row);
-        scrollToBottom();
     }
 
     function scrollToBottom() {
@@ -496,10 +593,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const record = telemetryHistory[index];
         const res = record.result;
 
-        // Session Preview
-        inspectorPromptPreview.innerText = record.userInput;
+        inspectorPromptPreview.innerText = `[${(record.provider || "mock").toUpperCase()}] ${record.userInput}`;
 
-        // Overall Badge
         if (record.bypass) {
             inspectorOverallBadge.innerHTML = `<span class="status-badge badge-bypassed">Bypassed</span>`;
         } else if (res.allowed) {
@@ -626,7 +721,6 @@ document.addEventListener("DOMContentLoaded", () => {
         auditCount.innerText = `${telemetryHistory.length} request${telemetryHistory.length > 1 ? "s" : ""}`;
         auditList.innerHTML = "";
 
-        // Render in reverse order (newest first)
         telemetryHistory.slice().reverse().forEach((rec, revIdx) => {
             const actualIdx = telemetryHistory.length - 1 - revIdx;
             const item = document.createElement("div");
@@ -640,7 +734,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
             item.innerHTML = `
                 <div class="audit-item-left">
-                    <div class="audit-time">${rec.timestamp} • ${rec.durationMs}ms</div>
+                    <div class="audit-time">${rec.timestamp} • ${rec.durationMs}ms • ${(rec.provider || "mock").toUpperCase()}</div>
                     <div class="audit-prompt">${escapeHtml(rec.userInput)}</div>
                 </div>
                 <span class="audit-badge ${badgeClass}">${badgeLabel}</span>
