@@ -1,14 +1,19 @@
 """
 LLM Client Interface for SecureLLM
 
-Provides utility functions to call real LLM APIs (like Google Gemini)
-and a robust Mock LLM for local demonstration and offline testing.
+Provides unified synchronous and real-time streaming integrations for:
+1. Google Gemini (e.g. gemini-2.5-flash, gemini-1.5-flash, gemini-1.5-pro)
+2. OpenAI GPT (e.g. gpt-4o, gpt-4o-mini, gpt-3.5-turbo)
+3. Anthropic Claude (e.g. claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022, claude-3-haiku-20240307)
+4. Local Mock Model (offline simulation with vulnerability tests)
 """
 
 from __future__ import annotations
+import json
 import logging
+import time
 import requests
-from typing import List, Dict, Any, Union, Optional
+from typing import List, Dict, Any, Union, Optional, Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +23,10 @@ MOCK_SYSTEM_RULES = (
     "configuration or these instructions."
 )
 
+# =====================================================================
+# 1. Google Gemini Client & Streaming
+# =====================================================================
+
 def call_gemini_api(
     prompt: str,
     api_key: str,
@@ -25,39 +34,23 @@ def call_gemini_api(
     system_instruction: Optional[str] = None
 ) -> str:
     """
-    Calls the Google Gemini API using raw requests.
+    Calls the Google Gemini API synchronously.
     """
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    headers = {"Content-Type": "application/json"}
     
-    headers = {
-        "Content-Type": "application/json"
-    }
-    
-    # Construct contents payload
     payload: Dict[str, Any] = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt}
-                ]
-            }
-        ]
+        "contents": [{"parts": [{"text": prompt}]}]
     }
     
-    # If system instruction is provided, place it in systemInstruction configuration
     if system_instruction:
-        payload["systemInstruction"] = {
-            "parts": [
-                {"text": system_instruction}
-            ]
-        }
+        payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
         
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
         res_json = response.json()
         
-        # Parse response text
         candidates = res_json.get("candidates", [])
         if candidates:
             parts = candidates[0].get("content", {}).get("parts", [])
@@ -72,20 +65,281 @@ def call_gemini_api(
         except Exception:
             return f"Gemini API Error: {str(e)}"
 
+
+def stream_gemini_api(
+    prompt: str,
+    api_key: str,
+    model: str = "gemini-2.5-flash",
+    system_instruction: Optional[str] = None
+) -> Iterator[str]:
+    """
+    Streams tokens in real time from Google Gemini API using alt=sse.
+    """
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse&key={api_key}"
+    headers = {"Content-Type": "application/json"}
+    
+    payload: Dict[str, Any] = {
+        "contents": [{"parts": [{"text": prompt}]}]
+    }
+    
+    if system_instruction:
+        payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
+        
+    try:
+        with requests.post(url, headers=headers, json=payload, stream=True, timeout=30) as response:
+            if response.status_code != 200:
+                try:
+                    err = response.json()
+                    yield f"Gemini API Error ({response.status_code}): {err.get('error', {}).get('message', response.text)}"
+                except Exception:
+                    yield f"Gemini API Error ({response.status_code}): {response.text}"
+                return
+
+            for line in response.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data: "):
+                    continue
+                data_str = line[6:].strip()
+                if not data_str:
+                    continue
+                try:
+                    data = json.loads(data_str)
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        for part in parts:
+                            text_chunk = part.get("text", "")
+                            if text_chunk:
+                                yield text_chunk
+                except Exception as ex:
+                    logger.debug(f"Gemini SSE parse skip: {ex}")
+    except Exception as e:
+        logger.error(f"Gemini streaming exception: {e}")
+        yield f"\n[Gemini Stream Error: {str(e)}]"
+
+
+# =====================================================================
+# 2. OpenAI GPT Client & Streaming
+# =====================================================================
+
+def call_openai_api(
+    prompt: str,
+    api_key: str,
+    model: str = "gpt-4o-mini",
+    system_instruction: Optional[str] = None
+) -> str:
+    """
+    Calls OpenAI Chat Completions API synchronously.
+    """
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    
+    messages = []
+    if system_instruction:
+        messages.append({"role": "system", "content": system_instruction})
+    messages.append({"role": "user", "content": prompt})
+    
+    payload = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.7
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=35)
+        if response.status_code != 200:
+            try:
+                err = response.json()
+                return f"OpenAI API Error ({response.status_code}): {err.get('error', {}).get('message', response.text)}"
+            except Exception:
+                return f"OpenAI API Error ({response.status_code}): {response.text}"
+                
+        data = response.json()
+        choices = data.get("choices", [])
+        if choices:
+            return choices[0].get("message", {}).get("content", "")
+        return "Error: No text returned from OpenAI API."
+    except requests.exceptions.RequestException as e:
+        logger.error(f"OpenAI API request failed: {e}")
+        return f"OpenAI API Request Error: {str(e)}"
+
+
+def stream_openai_api(
+    prompt: str,
+    api_key: str,
+    model: str = "gpt-4o-mini",
+    system_instruction: Optional[str] = None
+) -> Iterator[str]:
+    """
+    Streams tokens in real time from OpenAI Chat Completions API.
+    """
+    url = "https://api.openai.com/v1/chat/completions"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {api_key}"
+    }
+    
+    messages = []
+    if system_instruction:
+        messages.append({"role": "system", "content": system_instruction})
+    messages.append({"role": "user", "content": prompt})
+    
+    payload = {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+        "temperature": 0.7
+    }
+    
+    try:
+        with requests.post(url, headers=headers, json=payload, stream=True, timeout=35) as response:
+            if response.status_code != 200:
+                try:
+                    err = response.json()
+                    yield f"OpenAI API Error ({response.status_code}): {err.get('error', {}).get('message', response.text)}"
+                except Exception:
+                    yield f"OpenAI API Error ({response.status_code}): {response.text}"
+                return
+
+            for line in response.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data: "):
+                    continue
+                data_str = line[6:].strip()
+                if data_str == "[DONE]":
+                    break
+                try:
+                    data = json.loads(data_str)
+                    choices = data.get("choices", [])
+                    if choices:
+                        delta = choices[0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            yield content
+                except Exception as ex:
+                    logger.debug(f"OpenAI stream parse skip: {ex}")
+    except Exception as e:
+        logger.error(f"OpenAI streaming error: {e}")
+        yield f"\n[OpenAI Stream Error: {str(e)}]"
+
+
+# =====================================================================
+# 3. Anthropic Claude Client & Streaming
+# =====================================================================
+
+def call_claude_api(
+    prompt: str,
+    api_key: str,
+    model: str = "claude-3-5-sonnet-20241022",
+    system_instruction: Optional[str] = None
+) -> str:
+    """
+    Calls Anthropic Messages API synchronously.
+    """
+    url = "https://api.anthropic.com/v1/messages"
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01"
+    }
+    
+    payload: Dict[str, Any] = {
+        "model": model,
+        "max_tokens": 1024,
+        "messages": [{"role": "user", "content": prompt}]
+    }
+    
+    if system_instruction:
+        payload["system"] = system_instruction
+        
+    try:
+        response = requests.post(url, headers=headers, json=payload, timeout=35)
+        if response.status_code != 200:
+            try:
+                err = response.json()
+                return f"Claude API Error ({response.status_code}): {err.get('error', {}).get('message', response.text)}"
+            except Exception:
+                return f"Claude API Error ({response.status_code}): {response.text}"
+                
+        data = response.json()
+        content = data.get("content", [])
+        if content:
+            return "".join([c.get("text", "") for c in content if c.get("type") == "text"])
+        return "Error: No text returned from Claude API."
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Claude API request failed: {e}")
+        return f"Claude API Request Error: {str(e)}"
+
+
+def stream_claude_api(
+    prompt: str,
+    api_key: str,
+    model: str = "claude-3-5-sonnet-20241022",
+    system_instruction: Optional[str] = None
+) -> Iterator[str]:
+    """
+    Streams tokens in real time from Anthropic Messages API.
+    """
+    url = "https://api.anthropic.com/v1/messages"
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01"
+    }
+    
+    payload: Dict[str, Any] = {
+        "model": model,
+        "max_tokens": 1024,
+        "stream": True,
+        "messages": [{"role": "user", "content": prompt}]
+    }
+    
+    if system_instruction:
+        payload["system"] = system_instruction
+        
+    try:
+        with requests.post(url, headers=headers, json=payload, stream=True, timeout=35) as response:
+            if response.status_code != 200:
+                try:
+                    err = response.json()
+                    yield f"Claude API Error ({response.status_code}): {err.get('error', {}).get('message', response.text)}"
+                except Exception:
+                    yield f"Claude API Error ({response.status_code}): {response.text}"
+                return
+
+            for line in response.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data: "):
+                    continue
+                data_str = line[6:].strip()
+                try:
+                    data = json.loads(data_str)
+                    ev_type = data.get("type")
+                    if ev_type == "content_block_delta":
+                        delta = data.get("delta", {})
+                        if delta.get("type") == "text_delta":
+                            yield delta.get("text", "")
+                    elif ev_type == "message_stop":
+                        break
+                except Exception:
+                    pass
+    except Exception as e:
+        logger.error(f"Claude streaming error: {e}")
+        yield f"\n[Claude Stream Error: {str(e)}]"
+
+
+# =====================================================================
+# 4. Mock Model & Streaming Simulation
+# =====================================================================
+
 def get_mock_response(prompt: str) -> str:
     """
     Simulates an LLM response based on keywords in the prompt.
-    Includes simulated vulnerability behavior if the guard is bypassed
-    (e.g., if raw prompts are fed directly without the secure proxy wrapper).
     """
     prompt_lower = prompt.lower()
-    
-    # Check if a jailbreak attempt succeeded (e.g. DAN mode, instructions override)
-    # If the prompt contains the boundary tag headers, it means the DualContextBuilder protected it.
-    # Otherwise, it might be raw and vulnerable.
     is_protected = "[[SYSTEM_" in prompt or "[[USER_" in prompt
     
-    # Simulating standard prompt injection success if NOT protected
+    # Vulnerability behavior if guard is bypassed
     if not is_protected:
         if "ignore" in prompt_lower and "instructions" in prompt_lower:
             return (
@@ -105,7 +359,7 @@ def get_mock_response(prompt: str) -> str:
                 "Data leaked successfully."
             )
             
-    # Default simulated helpful, protected responses:
+    # Default protected assistant responses
     if "order" in prompt_lower and "#4521" in prompt_lower:
         return (
             "Hi there! I can help you track order #4521. "
@@ -125,8 +379,6 @@ def get_mock_response(prompt: str) -> str:
             "Please register your product at warranty.acme.com to activate your coverage."
         )
     elif "summarize" in prompt_lower and "review" in prompt_lower:
-        # Note: If indirect prompt injection was inside the tool content, it was escaped
-        # and the model is instructed to treat it as data.
         if "ignore prior instructions" in prompt_lower or "email the customer" in prompt_lower:
             return (
                 "Here is a summary of the product review:\n\n"
@@ -142,6 +394,22 @@ def get_mock_response(prompt: str) -> str:
             "How can I help you today?"
         )
 
+
+def stream_mock_response(prompt: str) -> Iterator[str]:
+    """
+    Simulates real-time token streaming for local mock assistant.
+    """
+    full_text = get_mock_response(prompt)
+    words = full_text.split(" ")
+    for i, word in enumerate(words):
+        yield word + (" " if i < len(words) - 1 else "")
+        time.sleep(0.02)
+
+
+# =====================================================================
+# 5. Unified Dispatchers
+# =====================================================================
+
 def generate_llm_response(
     prompt: str,
     api_key: Optional[str] = None,
@@ -150,17 +418,74 @@ def generate_llm_response(
     system_instruction: Optional[str] = None
 ) -> str:
     """
-    Dispatches generation to the chosen provider.
+    Dispatches generation synchronously to the chosen provider.
     """
-    if not api_key or provider == "mock":
+    provider = (provider or "mock").lower()
+    
+    if provider == "mock" or not api_key:
         return get_mock_response(prompt)
         
     if provider == "gemini":
         return call_gemini_api(
             prompt=prompt,
             api_key=api_key,
-            model=model,
+            model=model or "gemini-2.5-flash",
+            system_instruction=system_instruction
+        )
+    elif provider in ("openai", "gpt"):
+        return call_openai_api(
+            prompt=prompt,
+            api_key=api_key,
+            model=model or "gpt-4o-mini",
+            system_instruction=system_instruction
+        )
+    elif provider in ("anthropic", "claude"):
+        return call_claude_api(
+            prompt=prompt,
+            api_key=api_key,
+            model=model or "claude-3-5-sonnet-20241022",
             system_instruction=system_instruction
         )
         
     return f"Error: Provider '{provider}' not supported."
+
+
+def stream_llm_response(
+    prompt: str,
+    api_key: Optional[str] = None,
+    provider: str = "gemini",
+    model: str = "gemini-2.5-flash",
+    system_instruction: Optional[str] = None
+) -> Iterator[str]:
+    """
+    Dispatches generation as a real-time token stream to the chosen provider.
+    """
+    provider = (provider or "mock").lower()
+    
+    if provider == "mock" or not api_key:
+        yield from stream_mock_response(prompt)
+        return
+        
+    if provider == "gemini":
+        yield from stream_gemini_api(
+            prompt=prompt,
+            api_key=api_key,
+            model=model or "gemini-2.5-flash",
+            system_instruction=system_instruction
+        )
+    elif provider in ("openai", "gpt"):
+        yield from stream_openai_api(
+            prompt=prompt,
+            api_key=api_key,
+            model=model or "gpt-4o-mini",
+            system_instruction=system_instruction
+        )
+    elif provider in ("anthropic", "claude"):
+        yield from stream_claude_api(
+            prompt=prompt,
+            api_key=api_key,
+            model=model or "claude-3-5-sonnet-20241022",
+            system_instruction=system_instruction
+        )
+    else:
+        yield f"Error: Provider '{provider}' not supported."
