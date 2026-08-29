@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SecureLLM AI — Multi-Layer Prompt Injection Defense</title>
-    <!-- Google Fonts: Inter & Space Grotesk -->
+    <title>SecureLLM AI — Real-Time Prompt Injection Defense (GPT, Claude, Gemini)</title>
+    <!-- Google Fonts: Inter, Space Grotesk & JetBrains Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -27,15 +27,15 @@
                 </div>
                 <div class="brand-info">
                     <h1>SecureLLM <span class="brand-accent">AI</span></h1>
-                    <span class="brand-subtext">3-Layer Background Defense Proxy</span>
+                    <span class="brand-subtext">Real-Time Multi-LLM Defense Proxy</span>
                 </div>
             </div>
 
             <div class="nav-center">
                 <div class="shield-indicator" id="nav-shield-indicator" title="All 3 defense layers (Sanitizer, ML Intent, and Context Encapsulation) execute silently in the background.">
                     <span class="pulse-dot"></span>
-                    <span class="shield-text">Background Defense Shield: <strong>Active</strong></span>
-                    <span class="shield-tag">3 Layers Running</span>
+                    <span class="shield-text">Background Shield: <strong>Active</strong></span>
+                    <span class="shield-tag" id="active-llm-tag">Gemini • GPT • Claude</span>
                 </div>
             </div>
 
@@ -63,9 +63,10 @@
                         <div class="welcome-icon">
                             <i class="fa-solid fa-shield-virus"></i>
                         </div>
-                        <h2>Secure AI Assistant Workspace</h2>
+                        <h2>Real-Time Protected AI Workspace</h2>
                         <p class="welcome-desc">
-                            All prompts are screened in the <strong>background</strong> across 3 defense layers before reaching the LLM:
+                            Connect live to <strong>Google Gemini</strong>, <strong>OpenAI GPT</strong>, or <strong>Anthropic Claude</strong> in real time.
+                            Every prompt is screened in the <strong>background</strong> across 3 defense layers:
                             <span class="layer-pills">
                                 <span class="pill"><i class="fa-solid fa-broom"></i> 1. Heuristic Sanitizer</span>
                                 <span class="pill"><i class="fa-solid fa-brain"></i> 2. ML Intent Classifier</span>
@@ -117,19 +118,36 @@
                         </button>
                     </div>
 
-                    <!-- Input Toolbar -->
+                    <!-- Input Toolbar: Provider & Model Selector -->
                     <div class="input-toolbar">
                         <div class="toolbar-left">
+                            <!-- Provider Select -->
                             <div class="provider-pill">
-                                <label for="provider-select"><i class="fa-solid fa-robot"></i> Model:</label>
+                                <label for="provider-select"><i class="fa-solid fa-robot"></i> Provider:</label>
                                 <select id="provider-select" class="clean-select">
-                                    <option value="mock" selected>Local Mock Model</option>
-                                    <option value="gemini">Google Gemini 2.5 Flash</option>
+                                    <option value="gemini">Google Gemini</option>
+                                    <option value="openai">OpenAI GPT</option>
+                                    <option value="claude">Anthropic Claude</option>
+                                    <option value="mock">Local Mock Model</option>
                                 </select>
                             </div>
 
-                            <div class="api-key-inline" id="api-key-inline" style="display: none;">
-                                <input type="password" id="api-key" placeholder="Gemini API Key..." class="api-key-input" autocomplete="off">
+                            <!-- Model Select -->
+                            <div class="provider-pill model-pill">
+                                <label for="model-select"><i class="fa-solid fa-microchip"></i> Model:</label>
+                                <select id="model-select" class="clean-select">
+                                    <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                                    <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                                    <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                                </select>
+                            </div>
+
+                            <!-- API Key Input -->
+                            <div class="api-key-inline" id="api-key-inline">
+                                <input type="password" id="api-key" placeholder="API Key..." class="api-key-input" autocomplete="off">
+                                <button type="button" class="btn-toggle-key-visibility" id="btn-toggle-key" title="Show/Hide API Key">
+                                    <i class="fa-regular fa-eye"></i>
+                                </button>
                             </div>
                         </div>
 
@@ -148,7 +166,7 @@
                     <!-- Input Box & Submit -->
                     <div class="input-box-wrapper">
                         <textarea id="user-input" class="chat-textarea" placeholder="Type your message, prompt, or injection attack test..." rows="2"></textarea>
-                        <button id="btn-send" class="btn-send" title="Send message (Screened through 3 background defense layers)">
+                        <button id="btn-send" class="btn-send" title="Send message (Real-time streamed & protected in background)">
                             <i class="fa-solid fa-paper-plane"></i>
                         </button>
                     </div>
@@ -156,11 +174,11 @@
                     <div class="input-footer-note">
                         <span><i class="fa-solid fa-lock"></i> Protected by SecureLLM Background Proxy</span>
                         <span class="divider">•</span>
-                        <span>Layer 1 Regex Heuristics</span>
+                        <span>Layer 1 Heuristic Regex</span>
                         <span class="divider">•</span>
-                        <span>Layer 2 Dual-Context Isolation</span>
+                        <span>Layer 2 ML Intent Classifier</span>
                         <span class="divider">•</span>
-                        <span>Layer 3 ML Intent Scoring</span>
+                        <span>Layer 3 Dual-Context Isolation</span>
                     </div>
                 </div>
 
