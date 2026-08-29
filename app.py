@@ -150,8 +150,8 @@ def get_config():
             "gemini": {
                 "has_key": bool(gemini_key),
                 "api_key": gemini_key,
-                "default_model": "gemini-2.5-flash",
-                "models": ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+                "default_model": "gemini-2.0-flash",
+                "models": ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
             },
             "openai": {
                 "has_key": bool(openai_key),
