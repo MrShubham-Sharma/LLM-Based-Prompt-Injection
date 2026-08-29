@@ -25,6 +25,89 @@ from secure_llm.llm_client import (
 
 app = Flask(__name__)
 
+# ---------------------------------------------------------------------------
+# CORS — allow browser extensions (chrome-extension://*) to call local Flask
+# ---------------------------------------------------------------------------
+@app.after_request
+def add_cors_headers(response):
+    origin = request.headers.get("Origin", "")
+    # Allow requests from Chrome/Edge extensions and localhost
+    if origin.startswith("chrome-extension://") or origin.startswith("moz-extension://") or "127.0.0.1" in origin or "localhost" in origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    else:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    return response
+
+@app.route("/api/screen", methods=["POST", "OPTIONS"])
+def screen_prompt():
+    """
+    Browser Extension Screening Endpoint.
+    Runs the 3-layer defense pipeline synchronously with NO LLM call.
+    Called by the SecureLLM browser extension when a user types on
+    ChatGPT, Gemini, or Claude official websites.
+
+    Request JSON: { "prompt": "...", "intent_threshold": 0.5 }
+    Response JSON: {
+        "allowed": bool,
+        "threat_score": float,          # 0.0 - 1.0 adversarial probability
+        "layer_blocked": int|null,      # 1, 2, or null
+        "reason": str,
+        "findings": [{ "rule_name", "severity", "description" }],
+        "cleaned_text": str
+    }
+    """
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
+
+    data = request.json or {}
+    prompt = data.get("prompt", "").strip()
+    intent_threshold = float(data.get("intent_threshold", 0.5))
+
+    if not prompt:
+        return jsonify({"allowed": True, "threat_score": 0.0, "layer_blocked": None,
+                        "reason": "Empty prompt.", "findings": [], "cleaned_text": ""}), 200
+
+    proxy = get_proxy(
+        intent_threshold=intent_threshold,
+        block_on_sanitizer=True,
+        block_on_intent=True
+    )
+    # Use a neutral system rule for extension screening
+    proxy.system_rules = "You are a helpful AI assistant."
+    result = proxy.process(prompt, tool_context=[])
+
+    findings = [
+        {
+            "rule_name": f.rule_name,
+            "severity": f.severity.value,
+            "description": f.description
+        }
+        for f in result.sanitization.findings
+    ]
+
+    # Determine which layer blocked (if any)
+    layer_blocked = None
+    if not result.allowed:
+        if result.sanitization.blocked:
+            layer_blocked = 1
+        elif result.intent and result.intent.label == "adversarial":
+            layer_blocked = 2
+
+    threat_score = 0.0
+    if result.intent and result.intent.adversarial_score:
+        threat_score = round(result.intent.adversarial_score, 4)
+
+    return jsonify({
+        "allowed": result.allowed,
+        "threat_score": threat_score,
+        "layer_blocked": layer_blocked,
+        "reason": result.reason or "OK",
+        "findings": findings,
+        "cleaned_text": result.sanitization.cleaned_text or prompt
+    })
+
 # Cache of proxy instances by (intent_threshold, block_on_sanitizer, block_on_intent)
 _proxy_cache = {}
 
