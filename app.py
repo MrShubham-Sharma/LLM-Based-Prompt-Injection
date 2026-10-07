@@ -3,7 +3,7 @@ SecureLLM AI — Multi-Provider Flask Server Backend
 
 Orchestrates the 3-layer prompt injection defense pipeline in the background
 and provides real-time streaming integrations with:
-- Google Gemini (gemini-2.5-flash, gemini-1.5-flash, gemini-1.5-pro)
+- Google Gemini (gemini-3.8-flash, gemini-2.5-flash, gemini-1.5-pro)
 - OpenAI GPT (gpt-4o, gpt-4o-mini, gpt-3.5-turbo)
 - Anthropic Claude (claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022, claude-3-haiku-20240307)
 - Local Mock Assistant (offline simulation)
@@ -161,30 +161,28 @@ def get_config():
     elif claude_key:
         default_provider = "claude"
 
+    # SECURITY: Never return raw API keys to the browser — only expose presence flag.
+    # The browser resolves the key via _resolve_api_key() per-request using .env.
     return jsonify({
         "default_provider": default_provider,
         "providers": {
             "gemini": {
                 "has_key": bool(gemini_key),
-                "api_key": gemini_key,
                 "default_model": "gemini-3.8-flash",
                 "models": ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
             },
             "openai": {
                 "has_key": bool(openai_key),
-                "api_key": openai_key,
                 "default_model": "gpt-4o-mini",
                 "models": ["gpt-4o-mini", "gpt-4o", "gpt-3.5-turbo"]
             },
             "claude": {
                 "has_key": bool(claude_key),
-                "api_key": claude_key,
                 "default_model": "claude-3-5-sonnet-20241022",
                 "models": ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-haiku-20240307"]
             },
             "mock": {
                 "has_key": True,
-                "api_key": "",
                 "default_model": "mock-local",
                 "models": ["mock-local"]
             }
@@ -203,6 +201,21 @@ def _resolve_api_key(provider: str, user_provided_key: str) -> str:
         return os.environ.get("ANTHROPIC_API_KEY", "")
     return ""
 
+def _parse_tool_context(raw_list: list) -> list:
+    """Convert raw JSON tool context items to ContextBlock objects."""
+    blocks = []
+    for item in raw_list:
+        if item.get("content"):
+            blocks.append(
+                ContextBlock(
+                    trust_level=TrustLevel.TOOL_OUTPUT,
+                    content=item["content"],
+                    source=item.get("source")
+                )
+            )
+    return blocks
+
+
 @app.route("/api/process", methods=["POST"])
 def process_prompt():
     """
@@ -212,26 +225,17 @@ def process_prompt():
     system_rules = data.get("system_rules", MOCK_SYSTEM_RULES)
     user_input = data.get("user_input", "")
     tool_context_raw = data.get("tool_context", [])
-    
+
     intent_threshold = float(data.get("intent_threshold", 0.5))
     block_on_sanitizer = bool(data.get("block_on_sanitizer", True))
     block_on_intent = bool(data.get("block_on_intent", True))
-    
+
     provider = data.get("provider", "mock")
     model = data.get("model", "")
     api_key = _resolve_api_key(provider, data.get("api_key", ""))
     bypass_proxy = bool(data.get("bypass_proxy", False))
 
-    tool_context = []
-    for item in tool_context_raw:
-        if item.get("content"):
-            tool_context.append(
-                ContextBlock(
-                    trust_level=TrustLevel.TOOL_OUTPUT,
-                    content=item.get("content"),
-                    source=item.get("source")
-                )
-            )
+    tool_context = _parse_tool_context(tool_context_raw)
 
     if bypass_proxy:
         raw_prompt = f"System Rules:\n{system_rules}\n\nUser Input:\n{user_input}"
@@ -320,16 +324,7 @@ def process_prompt_stream():
     api_key = _resolve_api_key(provider, data.get("api_key", ""))
     bypass_proxy = bool(data.get("bypass_proxy", False))
 
-    tool_context = []
-    for item in tool_context_raw:
-        if item.get("content"):
-            tool_context.append(
-                ContextBlock(
-                    trust_level=TrustLevel.TOOL_OUTPUT,
-                    content=item.get("content"),
-                    source=item.get("source")
-                )
-            )
+    tool_context = _parse_tool_context(tool_context_raw)
 
     def generate_events():
         if bypass_proxy:

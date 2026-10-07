@@ -5,3 +5,6 @@ __pycache__/
 *.pkl
 *.parquet
 model/*.parquet
+# Binary artifacts - rebuild from source
+secure_llm.zip
+*.zip

@@ -2,7 +2,7 @@
  * SecureLLM AI — Real-Time Multi-LLM Dashboard & Background Defense Controller
  *
  * Supports live real-time token streaming with:
- * - Google Gemini (gemini-2.5-flash, gemini-1.5-flash, gemini-1.5-pro)
+ * - Google Gemini (gemini-3.8-flash, gemini-2.5-flash, gemini-1.5-pro)
  * - OpenAI GPT (gpt-4o, gpt-4o-mini, gpt-3.5-turbo)
  * - Anthropic Claude (claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022, claude-3-haiku-20240307)
  * - Local Mock Model (simulation)
@@ -29,7 +29,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const apiKeyInline = document.getElementById("api-key-inline");
     const apiKeyInput = document.getElementById("api-key");
     const btnToggleKey = document.getElementById("btn-toggle-key");
-    const activeLlmTag = document.getElementById("active-llm-tag");
+    // Note: activeLlmTag removed — no element with that ID exists in HTML.
+    // Provider label is shown via the model select dropdown instead.
 
     const toggleBypass = document.getElementById("toggle-bypass");
     const btnClearChat = document.getElementById("btn-clear-chat");
@@ -178,22 +179,18 @@ document.addEventListener("DOMContentLoaded", () => {
         if (provider === "mock") {
             apiKeyInline.style.display = "none";
             apiKeyInput.value = "";
-            activeLlmTag.innerText = "Local Simulation";
         } else {
             apiKeyInline.style.display = "flex";
             const placeholder = providerModelDefaults[provider]?.placeholder || "API Key...";
             apiKeyInput.placeholder = placeholder;
 
-            // Auto-fill from server config if available
-            if (info.api_key) {
-                apiKeyInput.value = info.api_key;
-            } else {
-                apiKeyInput.value = "";
+            // When config says key is present (.has_key), show a placeholder
+            // but never auto-fill — the real key stays server-side.
+            if (info.has_key && !apiKeyInput.value) {
+                apiKeyInput.placeholder = "Key loaded from .env";
+            } else if (!info.has_key) {
+                apiKeyInput.placeholder = placeholder;
             }
-
-            if (provider === "gemini") activeLlmTag.innerText = "Gemini Active";
-            else if (provider === "openai") activeLlmTag.innerText = "GPT Active";
-            else if (provider === "claude") activeLlmTag.innerText = "Claude Active";
         }
     }
 
@@ -311,6 +308,14 @@ document.addEventListener("DOMContentLoaded", () => {
     btnOpenInspector.addEventListener("click", () => openInspector());
     btnCloseInspector.addEventListener("click", closeInspector);
     inspectorOverlay.addEventListener("click", closeInspector);
+
+    // Close modal/drawer on Escape key
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            closeConfigModal();
+            closeInspector();
+        }
+    });
 
     btnCopyFinalPrompt.addEventListener("click", () => {
         const text = step3FinalPrompt.innerText;
@@ -435,7 +440,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
                         telemetryHistory.push(record);
                         activeTelemetryIndex = telemetryHistory.length - 1;
+                        // Animate the badge counter
                         telemetryBadgeCount.innerText = telemetryHistory.length;
+                        telemetryBadgeCount.classList.add("bump");
+                        setTimeout(() => telemetryBadgeCount.classList.remove("bump"), 200);
                         updateAuditList();
 
                         // If blocked by background defense:

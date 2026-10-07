@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import secrets
 from dataclasses import dataclass
 from enum import Enum
 from typing import List, Optional
@@ -53,11 +54,14 @@ class DualContextBuilder:
     """
 
     def __init__(self, session_salt: Optional[str] = None):
-        # A session-specific salt makes the delimiter unpredictable to an
-        # attacker who doesn't know it, without requiring true randomness
-        # at every call (useful for reproducibility/testing).
-        salt = session_salt or "default-session"
-        digest = hashlib.sha256(salt.encode("utf-8")).hexdigest()[:12]
+        # Use a cryptographically random per-request salt so the boundary tag
+        # is unpredictable and cannot be precomputed by an attacker.
+        # A caller may pass an explicit salt only for deterministic testing.
+        if session_salt:
+            salt_bytes = session_salt.encode("utf-8")
+            digest = hashlib.sha256(salt_bytes).hexdigest()[:12]
+        else:
+            digest = secrets.token_hex(6)  # 12 hex chars, truly random
         self._boundary_id = digest
 
     # -- escaping -----------------------------------------------------

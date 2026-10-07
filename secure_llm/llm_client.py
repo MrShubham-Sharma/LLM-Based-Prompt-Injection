@@ -50,11 +50,12 @@ def call_gemini_api(
     if system_instruction:
         payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
         
+    response = None
     try:
         response = requests.post(url, headers=headers, json=payload, timeout=30)
         response.raise_for_status()
         res_json = response.json()
-        
+
         candidates = res_json.get("candidates", [])
         if candidates:
             parts = candidates[0].get("content", {}).get("parts", [])
@@ -63,11 +64,13 @@ def call_gemini_api(
         return "Error: No text returned from Gemini API."
     except requests.exceptions.RequestException as e:
         logger.error(f"Gemini API request failed: {e}")
-        try:
-            error_details = response.json()
-            return f"Gemini API Error: {error_details.get('error', {}).get('message', str(e))}"
-        except Exception:
-            return f"Gemini API Error: {str(e)}"
+        if response is not None:
+            try:
+                error_details = response.json()
+                return f"Gemini API Error: {error_details.get('error', {}).get('message', str(e))}"
+            except Exception:
+                pass
+        return f"Gemini API Error: {str(e)}"
 
 
 def stream_gemini_api(

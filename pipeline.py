@@ -1,17 +1,17 @@
 """
 SecureLLM AI — Proxy Pipeline
 
-Orchestrates the three defense layers in order:
+Orchestrates the three defense layers in execution order:
 
     raw input
         -> Layer 1: sanitizer.sanitize()          (fast heuristic filter)
-        -> Layer 3: intent_classifier.predict()    (semantic intent check)
-        -> Layer 2: context_encapsulation.build()  (isolate + template)
+        -> Layer 2: intent_classifier.predict()    (semantic intent check)
+        -> Layer 3: context_encapsulation.build()  (isolate + template)
         -> final prompt ready to send to the LLM
 
 Layer 1 runs first because it's cheapest and can short-circuit obviously
-malicious input before spending compute on classification. Layer 3 runs
-before Layer 2 so the *original* text (not yet wrapped in delimiters) is
+malicious input before spending compute on classification. Layer 2 runs
+before Layer 3 so the *original* text (not yet wrapped in delimiters) is
 what gets classified — classifying the wrapped prompt would dilute the
 signal the model was trained on.
 
@@ -82,7 +82,7 @@ class SecureLLMProxy:
                 final_prompt=None,
             )
 
-        # --- Layer 3: Local Intent Classifier ------------------------
+        # --- Layer 2: Local Intent Classifier ------------------------
         intent = self._classifier.predict(sanitization.cleaned_text)
         if self.block_on_adversarial_intent and intent.label == "adversarial":
             return PipelineResult(
@@ -96,7 +96,7 @@ class SecureLLMProxy:
                 final_prompt=None,
             )
 
-        # --- Layer 2: Dual-Context Encapsulation ----------------------
+        # --- Layer 3: Dual-Context Encapsulation ----------------------
         final_prompt = self._context_builder.build(
             system_rules=self.system_rules,
             user_input=sanitization.cleaned_text,
