@@ -772,4 +772,229 @@ document.addEventListener("DOMContentLoaded", () => {
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
     }
+
+    // -----------------------------------------------------------------------
+    // Interactive Cyber Defense Background (Parallax + Sonar Telemetry Mesh)
+    // -----------------------------------------------------------------------
+    function initInteractiveBackground() {
+        const bgWrapper = document.getElementById("cyber-bg-wrapper");
+        const canvas = document.getElementById("cyber-bg-canvas");
+        if (!canvas || !bgWrapper) return;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        let dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+        function resize() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width * dpr;
+            canvas.height = height * dpr;
+            ctx.resetTransform?.();
+            ctx.scale(dpr, dpr);
+        }
+        resize();
+        window.addEventListener("resize", resize, { passive: true });
+
+        // Mouse state
+        const mouse = {
+            x: width * 0.5,
+            y: height * 0.45,
+            targetX: width * 0.5,
+            targetY: height * 0.45,
+            active: false
+        };
+
+        // Smooth parallax state
+        let parallaxX = 0;
+        let parallaxY = 0;
+        let targetParallaxX = 0;
+        let targetParallaxY = 0;
+
+        window.addEventListener("mousemove", (e) => {
+            mouse.targetX = e.clientX;
+            mouse.targetY = e.clientY;
+            mouse.active = true;
+
+            const normX = (e.clientX / width) - 0.5;
+            const normY = (e.clientY / height) - 0.5;
+            targetParallaxX = normX * -22;
+            targetParallaxY = normY * -14;
+
+            // Update CSS variables for radial spotlight
+            const pctX = ((e.clientX / width) * 100).toFixed(2) + "%";
+            const pctY = ((e.clientY / height) * 100).toFixed(2) + "%";
+            document.documentElement.style.setProperty("--mouse-x", pctX);
+            document.documentElement.style.setProperty("--mouse-y", pctY);
+        }, { passive: true });
+
+        window.addEventListener("mouseleave", () => {
+            mouse.active = false;
+            targetParallaxX = 0;
+            targetParallaxY = 0;
+        }, { passive: true });
+
+        // Click sonar rings
+        const ripples = [];
+        window.addEventListener("pointerdown", (e) => {
+            if (ripples.length < 5) {
+                ripples.push({
+                    x: e.clientX,
+                    y: e.clientY,
+                    radius: 4,
+                    maxRadius: 180,
+                    alpha: 0.35
+                });
+            }
+        }, { passive: true });
+
+        // Defense network nodes
+        const NODE_COUNT = Math.max(24, Math.min(46, Math.floor((width * height) / 26000)));
+        const nodes = [];
+        const colors = [
+            "rgba(34, 197, 94,",  // Emerald
+            "rgba(59, 130, 246,", // Slate blue
+            "rgba(56, 189, 248,"  // Sky cyan
+        ];
+
+        for (let i = 0; i < NODE_COUNT; i++) {
+            nodes.push({
+                x: Math.random() * width,
+                y: Math.random() * height,
+                vx: (Math.random() - 0.5) * 0.4,
+                vy: (Math.random() - 0.5) * 0.4,
+                radius: 1.2 + Math.random() * 1.6,
+                baseAlpha: 0.18 + Math.random() * 0.28,
+                colorPrefix: colors[Math.floor(Math.random() * colors.length)],
+                pulsePhase: Math.random() * Math.PI * 2
+            });
+        }
+
+        let isRunning = true;
+        let lastTime = performance.now();
+
+        function render(now) {
+            if (!isRunning) return;
+            const dt = Math.min((now - lastTime) / 1000, 0.1);
+            lastTime = now;
+
+            // Smooth parallax interpolation
+            parallaxX += (targetParallaxX - parallaxX) * 0.08;
+            parallaxY += (targetParallaxY - parallaxY) * 0.08;
+            document.documentElement.style.setProperty("--bg-parallax-x", parallaxX.toFixed(2) + "px");
+            document.documentElement.style.setProperty("--bg-parallax-y", parallaxY.toFixed(2) + "px");
+
+            // Smooth mouse interpolation
+            mouse.x += (mouse.targetX - mouse.x) * 0.12;
+            mouse.y += (mouse.targetY - mouse.y) * 0.12;
+
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw & update ripple rings
+            for (let i = ripples.length - 1; i >= 0; i--) {
+                const r = ripples[i];
+                r.radius += 120 * dt;
+                r.alpha *= 0.94;
+
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = `rgba(34, 197, 94, ${r.alpha.toFixed(3)})`;
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+                ctx.restore();
+
+                if (r.alpha < 0.01 || r.radius >= r.maxRadius) {
+                    ripples.splice(i, 1);
+                }
+            }
+
+            // Update & draw nodes
+            for (let i = 0; i < nodes.length; i++) {
+                const n = nodes[i];
+
+                if (!prefersReducedMotion) {
+                    n.x += n.vx;
+                    n.y += n.vy;
+
+                    if (n.x < 0) { n.x = 0; n.vx *= -1; }
+                    else if (n.x > width) { n.x = width; n.vx *= -1; }
+                    if (n.y < 0) { n.y = 0; n.vy *= -1; }
+                    else if (n.y > height) { n.y = height; n.vy *= -1; }
+                }
+
+                // Check distance to mouse
+                let hoverBoost = 0;
+                if (mouse.active) {
+                    const dx = mouse.x - n.x;
+                    const dy = mouse.y - n.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const maxDist = 160;
+
+                    if (dist < maxDist) {
+                        hoverBoost = (1 - dist / maxDist);
+                        // Draw subtle connection line to cursor
+                        ctx.beginPath();
+                        ctx.moveTo(n.x, n.y);
+                        ctx.lineTo(mouse.x, mouse.y);
+                        ctx.strokeStyle = `${n.colorPrefix} ${(hoverBoost * 0.28).toFixed(3)})`;
+                        ctx.lineWidth = 0.8;
+                        ctx.stroke();
+                    }
+                }
+
+                // Inter-node connection lines
+                for (let j = i + 1; j < nodes.length; j++) {
+                    const n2 = nodes[j];
+                    const dx = n.x - n2.x;
+                    const dy = n.y - n2.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const linkDist = 110;
+
+                    if (dist < linkDist) {
+                        const alpha = (1 - dist / linkDist) * 0.12;
+                        ctx.beginPath();
+                        ctx.moveTo(n.x, n.y);
+                        ctx.lineTo(n2.x, n2.y);
+                        ctx.strokeStyle = `rgba(255, 255, 255, ${alpha.toFixed(3)})`;
+                        ctx.lineWidth = 0.6;
+                        ctx.stroke();
+                    }
+                }
+
+                // Draw node
+                n.pulsePhase += 1.8 * dt;
+                const pulse = 0.85 + Math.sin(n.pulsePhase) * 0.15;
+                const nodeAlpha = Math.min(1, (n.baseAlpha + hoverBoost * 0.5) * pulse);
+                const nodeRadius = n.radius * (1 + hoverBoost * 0.6);
+
+                ctx.beginPath();
+                ctx.arc(n.x, n.y, nodeRadius, 0, Math.PI * 2);
+                ctx.fillStyle = `${n.colorPrefix} ${nodeAlpha.toFixed(3)})`;
+                ctx.fill();
+            }
+
+            requestAnimationFrame(render);
+        }
+
+        document.addEventListener("visibilitychange", () => {
+            if (document.hidden) {
+                isRunning = false;
+            } else {
+                isRunning = true;
+                lastTime = performance.now();
+                requestAnimationFrame(render);
+            }
+        });
+
+        requestAnimationFrame(render);
+    }
+
+    // Initialize interactive cyber background
+    initInteractiveBackground();
 });

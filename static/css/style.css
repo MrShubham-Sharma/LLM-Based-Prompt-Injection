@@ -85,12 +85,97 @@ body {
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
+    position: relative;
+}
+
+/* --------------------------------------------------------------------------
+   Interactive Cyber Defense Background
+   -------------------------------------------------------------------------- */
+.cyber-bg-wrapper {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+    background: #060709;
+}
+
+.cyber-bg-image {
+    position: absolute;
+    top: -5%;
+    left: -5%;
+    width: 110%;
+    height: 110%;
+    background-image: url('../cyber_backdrop.jpg');
+    background-size: cover;
+    background-position: center 30%;
+    opacity: 0.35;
+    filter: saturate(1.2) contrast(1.15) brightness(0.9);
+    transform: translate3d(var(--bg-parallax-x, 0px), var(--bg-parallax-y, 0px), 0) scale(1.03);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s ease;
+    will-change: transform;
+}
+
+/* Dynamic Interactive Spotlight following pointer */
+.cyber-bg-spotlight {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+        550px circle at var(--mouse-x, 50%) var(--mouse-y, 45%),
+        rgba(34, 197, 94, 0.08) 0%,
+        rgba(59, 130, 246, 0.05) 40%,
+        transparent 80%
+    );
+    opacity: 0.95;
+    mix-blend-mode: screen;
+    pointer-events: none;
+    will-change: background;
+}
+
+/* Subtle cyber security scanning dot matrix */
+.cyber-bg-grid {
+    position: absolute;
+    inset: 0;
+    background-image: 
+        radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+        linear-gradient(to bottom, transparent calc(100% - 1px), rgba(34, 197, 94, 0.02) 100%);
+    background-size: 32px 32px, 100% 48px;
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+/* Interactive particle & defense perimeter canvas */
+.cyber-bg-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+/* Deep cinematic vignette ensuring text and UI cards stay razor-sharp and WCAG compliant */
+.cyber-bg-vignette {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+        ellipse 90% 85% at 50% 45%,
+        rgba(6, 7, 9, 0.38) 0%,
+        rgba(6, 7, 9, 0.75) 60%,
+        #060709 100%
+    );
+    pointer-events: none;
 }
 
 /* --------------------------------------------------------------------------
    App Shell
    -------------------------------------------------------------------------- */
 .app-layout {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex-direction: column;
     height: 100vh;
@@ -110,6 +195,9 @@ body {
     border-bottom: 1px solid var(--border-1);
     flex-shrink: 0;
     gap: 12px;
+    background: rgba(10, 11, 14, 0.7);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
 }
 
 /* Brand */
@@ -257,8 +345,11 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: var(--surface-1);
+    background: rgba(14, 14, 18, 0.76);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     border: 1px solid var(--border-1);
+    box-shadow: 0 16px 48px -12px rgba(0, 0, 0, 0.55);
     border-radius: var(--r-12);
     overflow: hidden;
 }
@@ -888,14 +979,16 @@ body {
     width: 480px;
     max-width: 92vw;
     height: 100vh;
-    background: var(--surface-1);
-    border-left: 1px solid var(--border-1);
+    background: rgba(14, 14, 18, 0.88);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-left: 1px solid var(--border-2);
     z-index: 100;
     transform: translateX(calc(100% + 20px));
     transition: transform var(--t-panel);
     display: flex;
     flex-direction: column;
-    box-shadow: -16px 0 48px rgba(0,0,0,0.5);
+    box-shadow: -20px 0 56px rgba(0,0,0,0.65);
 }
 
 .inspector-drawer.active { transform: translateX(0); }
@@ -1338,12 +1431,14 @@ body {
     width: 540px;
     max-width: 92vw;
     max-height: 86vh;
-    background: var(--surface-1);
+    background: rgba(14, 14, 18, 0.92);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
     border: 1px solid var(--border-2);
     border-radius: var(--r-12);
     box-shadow:
-        0 0 0 1px rgba(255,255,255,0.04),
-        0 24px 64px rgba(0,0,0,0.7);
+        0 0 0 1px rgba(255,255,255,0.06),
+        0 24px 64px rgba(0,0,0,0.75);
     z-index: 115;
     opacity: 0;
     pointer-events: none;
