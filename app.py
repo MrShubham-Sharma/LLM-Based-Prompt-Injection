@@ -22,8 +22,14 @@ from secure_llm.llm_client import (
     stream_llm_response,
     MOCK_SYSTEM_RULES
 )
+from train_model import maybe_load_pretrained, register_train_route
 
 app = Flask(__name__)
+
+# ---------------------------------------------------------------------------
+# Training route — POST /api/train triggers re-download + re-train + hot-swap
+# ---------------------------------------------------------------------------
+register_train_route(app, _proxy_cache := {})
 
 # ---------------------------------------------------------------------------
 # CORS — allow browser extensions (chrome-extension://*) to call local Flask
@@ -109,22 +115,33 @@ def screen_prompt():
     })
 
 # Cache of proxy instances by (intent_threshold, block_on_sanitizer, block_on_intent)
-_proxy_cache = {}
+# NOTE: _proxy_cache is declared above (passed to register_train_route)
 
 def get_proxy(intent_threshold: float, block_on_sanitizer: bool, block_on_intent: bool) -> SecureLLMProxy:
     cache_key = (intent_threshold, block_on_sanitizer, block_on_intent)
     if cache_key not in _proxy_cache:
-        _proxy_cache[cache_key] = SecureLLMProxy(
+        proxy = SecureLLMProxy(
             system_rules="",
             intent_threshold=intent_threshold,
             block_on_sanitizer_high_severity=block_on_sanitizer,
             block_on_adversarial_intent=block_on_intent
         )
+        # Auto-load pretrained model if model/intent_classifier.pkl exists
+        maybe_load_pretrained(proxy._classifier)
+        _proxy_cache[cache_key] = proxy
     return _proxy_cache[cache_key]
 
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
+@app.route("/terms")
+def terms():
+    return render_template("terms.html")
 
 @app.route("/api/config")
 def get_config():
@@ -150,8 +167,8 @@ def get_config():
             "gemini": {
                 "has_key": bool(gemini_key),
                 "api_key": gemini_key,
-                "default_model": "gemini-2.0-flash",
-                "models": ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+                "default_model": "gemini-3.8-flash",
+                "models": ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
             },
             "openai": {
                 "has_key": bool(openai_key),

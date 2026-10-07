@@ -2,7 +2,7 @@
 LLM Client Interface for SecureLLM
 
 Provides unified synchronous and real-time streaming integrations for:
-1. Google Gemini (e.g. gemini-2.0-flash, gemini-1.5-flash, gemini-1.5-pro)
+1. Google Gemini (e.g. gemini-3.8-flash, gemini-2.5-flash, gemini-1.5-pro)
 2. OpenAI GPT (e.g. gpt-4o, gpt-4o-mini, gpt-3.5-turbo)
 3. Anthropic Claude (e.g. claude-3-5-sonnet-20241022, claude-3-5-haiku-20241022, claude-3-haiku-20240307)
 4. Local Mock Model (offline simulation with vulnerability tests)
@@ -30,12 +30,16 @@ MOCK_SYSTEM_RULES = (
 def call_gemini_api(
     prompt: str,
     api_key: str,
-    model: str = "gemini-2.0-flash",
+    model: str = "gemini-3.8-flash",
     system_instruction: Optional[str] = None
 ) -> str:
     """
     Calls the Google Gemini API synchronously.
     """
+    # Auto-remap deprecated models to latest recommended model
+    if model in ("gemini-2.0-flash", "gemini-2.0-flash-exp"):
+        model = "gemini-3.8-flash"
+
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
     
@@ -69,12 +73,16 @@ def call_gemini_api(
 def stream_gemini_api(
     prompt: str,
     api_key: str,
-    model: str = "gemini-2.0-flash",
+    model: str = "gemini-3.8-flash",
     system_instruction: Optional[str] = None
 ) -> Iterator[str]:
     """
     Streams tokens in real time from Google Gemini API using alt=sse.
     """
+    # Auto-remap deprecated models to latest recommended model
+    if model in ("gemini-2.0-flash", "gemini-2.0-flash-exp"):
+        model = "gemini-3.8-flash"
+
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse&key={api_key}"
     headers = {"Content-Type": "application/json"}
     
@@ -414,7 +422,7 @@ def generate_llm_response(
     prompt: str,
     api_key: Optional[str] = None,
     provider: str = "gemini",
-    model: str = "gemini-2.0-flash",
+    model: str = "gemini-3.8-flash",
     system_instruction: Optional[str] = None
 ) -> str:
     """
@@ -429,7 +437,7 @@ def generate_llm_response(
         return call_gemini_api(
             prompt=prompt,
             api_key=api_key,
-            model=model or "gemini-2.0-flash",
+            model=model or "gemini-3.8-flash",
             system_instruction=system_instruction
         )
     elif provider in ("openai", "gpt"):
@@ -454,7 +462,7 @@ def stream_llm_response(
     prompt: str,
     api_key: Optional[str] = None,
     provider: str = "gemini",
-    model: str = "gemini-2.0-flash",
+    model: str = "gemini-3.8-flash",
     system_instruction: Optional[str] = None
 ) -> Iterator[str]:
     """
@@ -470,7 +478,7 @@ def stream_llm_response(
         yield from stream_gemini_api(
             prompt=prompt,
             api_key=api_key,
-            model=model or "gemini-2.0-flash",
+            model=model or "gemini-3.8-flash",
             system_instruction=system_instruction
         )
     elif provider in ("openai", "gpt"):
