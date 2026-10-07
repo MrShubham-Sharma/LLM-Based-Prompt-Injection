@@ -163,6 +163,39 @@
                     </div>
 
                     <div class="toolbar-right">
+                        <!-- Quick Presets Dropdown Menu -->
+                        <div class="presets-dropdown-wrapper">
+                            <button class="toolbar-btn" id="btn-presets-menu" type="button" title="Insert a test attack or benign prompt">
+                                <i class="fa-solid fa-flask" aria-hidden="true"></i>
+                                <span>Presets</span>
+                            </button>
+                            <div class="presets-popover" id="presets-popover" role="menu" aria-label="Attack templates">
+                                <div class="popover-title">Benign Inquiries</div>
+                                <button class="preset-item test-chip" data-type="benign-order" type="button" role="menuitem">
+                                    <i class="fa-solid fa-circle-check text-success"></i> Customer inquiry
+                                </button>
+                                <button class="preset-item test-chip" data-type="benign-warranty" type="button" role="menuitem">
+                                    <i class="fa-solid fa-circle-check text-success"></i> Return policy
+                                </button>
+                                <div class="popover-title">Adversarial Attacks</div>
+                                <button class="preset-item test-chip text-danger" data-type="attack-ignore" type="button" role="menuitem">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> Instruction override
+                                </button>
+                                <button class="preset-item test-chip text-danger" data-type="attack-dan" type="button" role="menuitem">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> DAN jailbreak
+                                </button>
+                                <button class="preset-item test-chip text-danger" data-type="attack-delimiter" type="button" role="menuitem">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> Delimiter spoofing
+                                </button>
+                                <button class="preset-item test-chip text-danger" data-type="attack-hypothetical" type="button" role="menuitem">
+                                    <i class="fa-solid fa-triangle-exclamation"></i> Roleplay bypass
+                                </button>
+                                <button class="preset-item test-chip text-danger" data-type="attack-indirect" type="button" role="menuitem">
+                                    <i class="fa-solid fa-database"></i> RAG injection
+                                </button>
+                            </div>
+                        </div>
+
                         <label class="bypass-toggle" title="Disable all defense layers to observe raw model vulnerability" aria-label="Bypass defense layers">
                             <input type="checkbox" id="toggle-bypass">
                             <span class="bypass-slider"></span>
@@ -227,9 +260,15 @@
                 <span class="drawer-subtitle">Live screening results for each request</span>
             </div>
         </div>
-        <button class="drawer-close-btn" id="btn-close-inspector" title="Close inspector" aria-label="Close inspector">
-            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-        </button>
+        <div class="drawer-header-actions">
+            <button class="drawer-action-btn" id="btn-export-audit" title="Export audit telemetry as JSON" aria-label="Export audit telemetry">
+                <i class="fa-solid fa-download" aria-hidden="true"></i>
+                <span>Export JSON</span>
+            </button>
+            <button class="drawer-close-btn" id="btn-close-inspector" title="Close inspector" aria-label="Close inspector">
+                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+            </button>
+        </div>
     </div>
 
     <div class="drawer-body">

@@ -85,6 +85,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const auditCount = document.getElementById("audit-count");
     const toast = document.getElementById("toast");
 
+    // Enterprise Toolbar & Navigation Elements
+    const navShieldIndicator = document.getElementById("nav-shield-indicator");
+    const btnPresetsMenu = document.getElementById("btn-presets-menu");
+    const presetsPopover = document.getElementById("presets-popover");
+    const btnExportAudit = document.getElementById("btn-export-audit");
+
     // Provider model mapping fallback
     const providerModelDefaults = {
         gemini: {
@@ -244,9 +250,48 @@ document.addEventListener("DOMContentLoaded", () => {
                 showToast("Attached semi-trusted RAG context!");
             }
 
+            if (presetsPopover) {
+                presetsPopover.classList.remove("active");
+            }
+
             userInput.focus();
         });
     });
+
+    // Presets Popover menu toggle
+    if (btnPresetsMenu && presetsPopover) {
+        btnPresetsMenu.addEventListener("click", (e) => {
+            e.stopPropagation();
+            presetsPopover.classList.toggle("active");
+        });
+
+        document.addEventListener("click", (e) => {
+            if (!presetsPopover.contains(e.target) && e.target !== btnPresetsMenu) {
+                presetsPopover.classList.remove("active");
+            }
+        });
+    }
+
+    // Sync navbar defense indicator with Bypass toggle
+    if (toggleBypass && navShieldIndicator) {
+        toggleBypass.addEventListener("change", () => {
+            const shieldText = navShieldIndicator.querySelector(".shield-text");
+            const shieldTag = navShieldIndicator.querySelector(".shield-tag");
+            if (toggleBypass.checked) {
+                navShieldIndicator.classList.add("bypassed");
+                if (shieldText) shieldText.innerText = "Bypass Mode";
+                if (shieldTag) shieldTag.innerText = "Direct LLM";
+                navShieldIndicator.title = "Defense bypass is ACTIVE. Prompts flow directly to the LLM without screening.";
+                showToast("Bypass mode active: prompt screening disabled.");
+            } else {
+                navShieldIndicator.classList.remove("bypassed");
+                if (shieldText) shieldText.innerText = "Defense Active";
+                if (shieldTag) shieldTag.innerText = "3 Layers";
+                navShieldIndicator.title = "All 3 defense layers run silently in the background on every prompt.";
+                showToast("Proxy defense active: 3-layer screening restored.");
+            }
+        });
+    }
 
     function updateAttachedContextBanner() {
         if (toolContentInput.value.trim()) {
@@ -323,6 +368,23 @@ document.addEventListener("DOMContentLoaded", () => {
             navigator.clipboard.writeText(text).then(() => showToast("Constructed prompt copied!"));
         }
     });
+
+    if (btnExportAudit) {
+        btnExportAudit.addEventListener("click", () => {
+            if (telemetryHistory.length === 0) {
+                showToast("No telemetry events to export.");
+                return;
+            }
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(telemetryHistory, null, 2));
+            const downloadAnchor = document.createElement("a");
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `securellm_telemetry_audit_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+            showToast(`Exported ${telemetryHistory.length} audit records.`);
+        });
+    }
 
     btnClearChat.addEventListener("click", () => {
         chatMessages.innerHTML = "";
@@ -449,7 +511,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         // If blocked by background defense:
                         if (!telemetryData.allowed) {
                             textElement.classList.remove("cursor-blink");
-                            renderBlockedInPlace(messageRow, textElement, avatarElement, telemetryData.reason, activeTelemetryIndex);
+                            renderBlockedInPlace(messageRow, textElement, avatarElement, telemetryData, activeTelemetryIndex);
                             return;
                         }
 
@@ -564,9 +626,24 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    function renderBlockedInPlace(row, textElement, avatarElement, reason, recordIndex) {
+    function renderBlockedInPlace(row, textElement, avatarElement, telemetry, recordIndex) {
         avatarElement.className = "message-avatar avatar-blocked";
         avatarElement.innerHTML = '<i class="fa-solid fa-ban"></i>';
+
+        let layerLabel = "Background Defense Intercepted";
+        let layerDetail = "Adversarial signature blocked";
+        if (telemetry && typeof telemetry === "object") {
+            if (telemetry.sanitizer && !telemetry.sanitizer.passed) {
+                layerLabel = "Layer 1: Heuristic Regex Sanitizer";
+                const count = (telemetry.sanitizer.findings || []).length;
+                layerDetail = `${count} signature pattern${count > 1 ? "s" : ""} matched`;
+            } else if (telemetry.intent && telemetry.intent.label === "adversarial") {
+                layerLabel = "Layer 2: ML Intent Classifier";
+                layerDetail = `${((telemetry.intent.adversarial_score || 0) * 100).toFixed(1)}% threat confidence`;
+            }
+        }
+
+        const reasonText = (telemetry && typeof telemetry === "object") ? telemetry.reason : telemetry;
 
         const bubble = row.querySelector(".message-bubble");
         bubble.className = "message-bubble blocked-card";
@@ -574,9 +651,12 @@ document.addEventListener("DOMContentLoaded", () => {
             <div class="blocked-header">
                 <i class="fa-solid fa-shield-halved"></i> Threat Neutralized in Background
             </div>
-            <div class="blocked-reason-text">${escapeHtml(reason || "Malicious injection pattern detected.")}</div>
+            <div class="blocked-layer-badge">
+                <i class="fa-solid fa-triangle-exclamation"></i> ${layerLabel} · ${layerDetail}
+            </div>
+            <div class="blocked-reason-text">${escapeHtml(reasonText || "Malicious injection pattern detected.")}</div>
             <button class="btn-inspect-blocked" data-index="${recordIndex}">
-                <i class="fa-solid fa-microchip"></i> Inspect Background Defense Telemetry
+                <i class="fa-solid fa-microchip"></i> Inspect Defense Telemetry Breakdown
             </button>
         `;
 
@@ -626,7 +706,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 statusStep1.innerHTML = `<span class="badge-sub badge-blocked">Blocked</span>`;
                 step1StatusText.innerText = "Blocked (Threat Detected)";
             } else if (san.findings && san.findings.length > 0) {
-                statusStep1.innerHTML = `<span class="badge-sub" style="background: rgba(255,214,0,0.15); color: var(--accent-yellow);">Warnings</span>`;
+                statusStep1.innerHTML = `<span class="badge-sub" style="background: rgba(245,158,11,0.15); color: var(--amber);">Warnings</span>`;
                 step1StatusText.innerText = "Flagged Warnings";
             } else {
                 statusStep1.innerHTML = `<span class="badge-sub badge-passed">Passed</span>`;
@@ -681,11 +761,11 @@ document.addEventListener("DOMContentLoaded", () => {
             step2ScoreBar.style.width = `${pct}%`;
 
             if (score > 0.7) {
-                step2ScoreBar.style.backgroundColor = "var(--accent-red)";
+                step2ScoreBar.style.backgroundColor = "var(--red)";
             } else if (score > 0.45) {
-                step2ScoreBar.style.backgroundColor = "var(--accent-yellow)";
+                step2ScoreBar.style.backgroundColor = "var(--amber)";
             } else {
-                step2ScoreBar.style.backgroundColor = "var(--accent-green)";
+                step2ScoreBar.style.backgroundColor = "var(--green)";
             }
 
             if (intent.label === "adversarial") {
@@ -734,7 +814,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const item = document.createElement("div");
             item.className = "audit-item";
             if (actualIdx === activeTelemetryIndex) {
-                item.style.borderColor = "var(--accent-cyan)";
+                item.style.borderColor = "var(--blue-light)";
             }
 
             const badgeClass = rec.bypass ? "badge-bypassed" : (rec.result.allowed ? "badge-passed" : "badge-blocked");

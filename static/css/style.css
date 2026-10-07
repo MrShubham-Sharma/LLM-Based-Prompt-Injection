@@ -48,6 +48,12 @@
     --amber-dim:   rgba(245,158,11,0.10);
     --amber-b:     rgba(245,158,11,0.25);
 
+    /* Compatibility Aliases for dynamic JS telemetry */
+    --accent-red:    var(--red);
+    --accent-green:  var(--green);
+    --accent-yellow: var(--amber);
+    --accent-cyan:   var(--blue-light);
+
     /* Typography */
     --font:      'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
@@ -276,6 +282,30 @@ body {
     font-size: 10px;
     font-weight: 600;
     letter-spacing: 0.3px;
+}
+
+.shield-indicator.bypassed {
+    background: var(--amber-dim);
+    border-color: var(--amber-b);
+}
+
+.shield-indicator.bypassed .pulse-dot {
+    background: var(--amber);
+    animation: pulse-warn 1.4s ease infinite;
+}
+
+.shield-indicator.bypassed .shield-text {
+    color: var(--amber);
+}
+
+.shield-indicator.bypassed .shield-tag {
+    background: rgba(245, 158, 11, 0.16);
+    color: var(--amber);
+}
+
+@keyframes pulse-warn {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.35; transform: scale(0.8); }
 }
 
 /* Nav Actions */
@@ -674,6 +704,21 @@ body {
     color: #fff;
 }
 
+.blocked-layer-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(239, 68, 68, 0.18);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #fca5a5;
+    padding: 2px 7px;
+    border-radius: var(--r-4);
+    font-size: 10.5px;
+    font-weight: 600;
+    margin-bottom: 7px;
+    letter-spacing: 0.2px;
+}
+
 /* --------------------------------------------------------------------------
    Chat Input Area
    -------------------------------------------------------------------------- */
@@ -881,6 +926,65 @@ body {
     color: var(--text-1);
 }
 
+/* Presets Dropdown Popover */
+.presets-dropdown-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.presets-popover {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 0;
+    width: 250px;
+    background: rgba(18, 18, 22, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--border-2);
+    border-radius: var(--r-8);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65);
+    padding: 6px;
+    display: none;
+    flex-direction: column;
+    gap: 2px;
+    z-index: 60;
+}
+
+.presets-popover.active {
+    display: flex;
+}
+
+.popover-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-3);
+    padding: 6px 8px 3px;
+}
+
+.preset-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: var(--r-4);
+    background: transparent;
+    border: none;
+    color: var(--text-2);
+    font-size: 12px;
+    font-family: var(--font);
+    text-align: left;
+    cursor: pointer;
+    transition: var(--t-fast);
+}
+
+.preset-item:hover {
+    background: var(--surface-4);
+    color: var(--text-1);
+}
+
 /* Input box */
 .input-box-wrapper {
     display: flex;
@@ -1017,6 +1121,34 @@ body {
 }
 
 .drawer-subtitle { font-size: 11px; color: var(--text-3); }
+
+.drawer-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.drawer-action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--surface-3);
+    border: 1px solid var(--border-1);
+    color: var(--text-2);
+    padding: 4px 9px;
+    border-radius: var(--r-6);
+    font-size: 11.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--t-fast);
+    font-family: var(--font);
+}
+
+.drawer-action-btn:hover {
+    background: var(--surface-4);
+    border-color: var(--border-2);
+    color: var(--text-1);
+}
 
 .drawer-close-btn {
     background: var(--surface-3);
@@ -1803,8 +1935,9 @@ body {
 }
 
 @media (max-width: 520px) {
-    .toolbar-left { flex-wrap: wrap; }
-    .model-pill { display: none; }
+    .input-toolbar { flex-wrap: wrap; gap: 8px; }
+    .toolbar-left { flex-wrap: wrap; gap: 6px; }
+    .toolbar-right { margin-left: auto; flex-wrap: wrap; }
 }
 
 /* --------------------------------------------------------------------------
