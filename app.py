@@ -104,25 +104,30 @@ def screen_prompt():
         for f in result.sanitization.findings
     ]
 
-    # Determine which layer blocked (if any)
-    layer_blocked = None
-    if not result.allowed:
-        if result.sanitization.blocked:
-            layer_blocked = 1
-        elif result.intent and result.intent.label == "adversarial":
-            layer_blocked = 2
+    # Use the unified threat_score and blocking_layer from PipelineResult.
+    # These are now always populated (ML classifier always runs).
+    threat_score = result.threat_score
+    layer_blocked = result.blocking_layer
 
-    threat_score = 0.0
-    if result.intent and result.intent.adversarial_score:
-        threat_score = round(result.intent.adversarial_score, 4)
+    # Build intent info (always present now — classifier always runs)
+    intent_info = None
+    if result.intent:
+        intent_info = {
+            "label": result.intent.label,
+            "confidence": round(result.intent.confidence, 4),
+            "adversarial_score": round(result.intent.adversarial_score, 4),
+            "adversarial_pct": f"{result.intent.adversarial_score:.1%}",
+        }
 
     return jsonify({
         "allowed": result.allowed,
         "threat_score": threat_score,
+        "threat_pct": f"{threat_score:.1%}",
         "layer_blocked": layer_blocked,
         "reason": result.reason or "OK",
         "findings": findings,
-        "cleaned_text": result.sanitization.cleaned_text or prompt
+        "cleaned_text": result.sanitization.cleaned_text or prompt,
+        "intent": intent_info,
     })
 
 # Cache of proxy instances by (intent_threshold, block_on_sanitizer, block_on_intent)
@@ -291,13 +296,22 @@ def process_prompt():
             } for f in result.sanitization.findings
         ]
     }
-    
+
+    # ML classifier always runs now — intent is never None
     intent_data = {
         "label": result.intent.label if result.intent else "skipped",
-        "confidence": result.intent.confidence if result.intent else 0.0,
-        "adversarial_score": result.intent.adversarial_score if result.intent else 0.0
-    } if result.intent else None
-    
+        "confidence": round(result.intent.confidence, 4) if result.intent else 0.0,
+        "adversarial_score": round(result.intent.adversarial_score, 4) if result.intent else 0.0,
+        "adversarial_pct": f"{result.intent.adversarial_score:.1%}" if result.intent else "0.0%",
+        "threat_score": result.threat_score,
+        "threat_pct": f"{result.threat_score:.1%}",
+        "blocking_layer": result.blocking_layer,
+    } if result.intent else {
+        "label": "unavailable", "confidence": 0.0, "adversarial_score": 0.0,
+        "adversarial_pct": "0.0%", "threat_score": result.threat_score,
+        "threat_pct": f"{result.threat_score:.1%}", "blocking_layer": result.blocking_layer,
+    }
+
     llm_response = None
     if result.allowed:
         llm_response = generate_llm_response(
@@ -306,7 +320,7 @@ def process_prompt():
             provider=provider,
             model=model
         )
-        
+
     return jsonify({
         "allowed": result.allowed,
         "bypass_active": False,
@@ -385,12 +399,21 @@ def process_prompt_stream():
                 } for f in result.sanitization.findings
             ]
         }
-        
+
+        # ML classifier always runs now — intent is never None
         intent_data = {
             "label": result.intent.label if result.intent else "skipped",
-            "confidence": result.intent.confidence if result.intent else 0.0,
-            "adversarial_score": result.intent.adversarial_score if result.intent else 0.0
-        } if result.intent else None
+            "confidence": round(result.intent.confidence, 4) if result.intent else 0.0,
+            "adversarial_score": round(result.intent.adversarial_score, 4) if result.intent else 0.0,
+            "adversarial_pct": f"{result.intent.adversarial_score:.1%}" if result.intent else "0.0%",
+            "threat_score": result.threat_score,
+            "threat_pct": f"{result.threat_score:.1%}",
+            "blocking_layer": result.blocking_layer,
+        } if result.intent else {
+            "label": "unavailable", "confidence": 0.0, "adversarial_score": 0.0,
+            "adversarial_pct": "0.0%", "threat_score": result.threat_score,
+            "threat_pct": f"{result.threat_score:.1%}", "blocking_layer": result.blocking_layer,
+        }
 
         telemetry_data = {
             "allowed": result.allowed,
