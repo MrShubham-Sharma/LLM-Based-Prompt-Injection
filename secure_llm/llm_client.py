@@ -510,8 +510,11 @@ def generate_llm_response(
     """
     provider = (provider or "mock").lower()
     
-    if provider == "mock" or not api_key:
+    if provider == "mock":
         return get_mock_response(prompt)
+        
+    if not api_key:
+        return f"Error: No API key provided for {provider.capitalize()}. Please configure your API key in the .env file or UI."
         
     if provider == "gemini":
         return call_gemini_api(
@@ -550,8 +553,12 @@ def stream_llm_response(
     """
     provider = (provider or "mock").lower()
     
-    if provider == "mock" or not api_key:
+    if provider == "mock":
         yield from stream_mock_response(prompt)
+        return
+        
+    if not api_key:
+        yield f"Error: No API key provided for {provider.capitalize()}. Please configure your API key in the .env file or via the UI toolbar."
         return
         
     if provider == "gemini":
