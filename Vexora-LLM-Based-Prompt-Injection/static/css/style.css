@@ -120,9 +120,15 @@ body {
     background-position: center;
     opacity: 1.0;
     filter: none;
+    animation: flowBackground 120s linear infinite alternate;
     transform: translate3d(var(--bg-parallax-x, 0px), var(--bg-parallax-y, 0px), 0) scale(1.03);
     transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s ease;
-    will-change: transform;
+    will-change: transform, background-position;
+}
+
+@keyframes flowBackground {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 100% 50%; }
 }
 
 /* Dynamic Interactive Spotlight following pointer */
@@ -1057,9 +1063,21 @@ body {
     font-size: 10.5px;
     color: var(--text-4);
     flex-wrap: wrap;
+    background: linear-gradient(90deg, var(--text-4) 0%, #fff 50%, var(--text-4) 100%);
+    background-size: 200% auto;
+    color: transparent;
+    -webkit-background-clip: text;
+    background-clip: text;
+    animation: shine 3s linear infinite;
 }
 
-.input-footer-note .divider { opacity: 0.35; }
+@keyframes shine {
+    to {
+        background-position: 200% center;
+    }
+}
+
+.input-footer-note .divider { opacity: 0.35; color: var(--text-4); }
 
 /* --------------------------------------------------------------------------
    Inspector Drawer
