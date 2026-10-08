@@ -27,6 +27,31 @@ MOCK_SYSTEM_RULES = (
 # 1. Google Gemini Client & Streaming
 # =====================================================================
 
+GEMINI_FALLBACK_CANDIDATES = [
+    "gemini-3.8-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-flash-lite-latest",
+    "gemini-3-flash-preview",
+]
+
+def _resolve_gemini_candidates(model: Optional[str]) -> List[str]:
+    """
+    Normalizes requested model and produces an ordered candidate list for failover.
+    Remaps deprecated models to active stable models.
+    """
+    model_str = (model or "gemini-3.8-flash").strip()
+    if model_str in ("gemini-2.0-flash", "gemini-2.0-flash-exp", "gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"):
+        primary = "gemini-3.8-flash"
+    else:
+        primary = model_str
+
+    candidates = [primary]
+    for c in GEMINI_FALLBACK_CANDIDATES:
+        if c not in candidates:
+            candidates.append(c)
+    return candidates
+
+
 def call_gemini_api(
     prompt: str,
     api_key: str,
@@ -34,52 +59,62 @@ def call_gemini_api(
     system_instruction: Optional[str] = None
 ) -> str:
     """
-    Calls the Google Gemini API synchronously.
+    Calls the Google Gemini API synchronously with automatic fallback on 503 high-demand spikes.
     """
-    # Auto-remap deprecated models to latest recommended model
-    if model in ("gemini-2.0-flash", "gemini-2.0-flash-exp"):
-        model = "gemini-3.8-flash"
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    candidates = _resolve_gemini_candidates(model)
     headers = {"Content-Type": "application/json"}
-    
     payload: Dict[str, Any] = {
         "contents": [{"parts": [{"text": prompt}]}]
     }
-    
     if system_instruction:
         payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
-        
-    response = None
-    try:
-        # Use a short connect timeout (5s) + read timeout (25s) tuple.
-        # Vercel Hobby functions are hard-killed after 10s, so we want
-        # to fail fast rather than hanging until the OS kills the process.
-        response = requests.post(url, headers=headers, json=payload, timeout=(5, 25))
-        response.raise_for_status()
-        res_json = response.json()
 
-        candidates = res_json.get("candidates", [])
-        if candidates:
-            parts = candidates[0].get("content", {}).get("parts", [])
-            if parts:
-                return parts[0].get("text", "")
-        return "Error: No text returned from Gemini API."
-    except requests.exceptions.Timeout:
-        return (
-            "The Gemini API response timed out. This is common on Vercel's free tier "
-            "(10-second function limit). Try the Mock provider for instant responses, "
-            "or use a shorter prompt."
-        )
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Gemini API request failed: {e}")
-        if response is not None:
+    last_error_msg = ""
+    for candidate in candidates:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{candidate}:generateContent?key={api_key}"
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=(5, 25))
+            if response.status_code == 200:
+                res_json = response.json()
+                candidates_res = res_json.get("candidates", [])
+                if candidates_res:
+                    parts = candidates_res[0].get("content", {}).get("parts", [])
+                    if parts:
+                        return parts[0].get("text", "")
+                return "Error: No text returned from Gemini API."
+
+            err_details = {}
             try:
-                error_details = response.json()
-                return f"Gemini API Error: {error_details.get('error', {}).get('message', str(e))}"
+                err_details = response.json().get("error", {})
             except Exception:
                 pass
-        return f"Gemini API Error: {str(e)}"
+            err_msg = err_details.get("message", response.text)
+            last_error_msg = f"HTTP {response.status_code}: {err_msg}"
+
+            if response.status_code in (503, 429, 404) or "high demand" in err_msg.lower():
+                logger.warning(
+                    f"Gemini model '{candidate}' returned {response.status_code} ({err_msg}). "
+                    f"Trying fallback model..."
+                )
+                continue
+            else:
+                return f"Gemini API Error ({response.status_code}): {err_msg}"
+
+        except requests.exceptions.Timeout:
+            logger.warning(f"Gemini model '{candidate}' timed out. Trying fallback...")
+            continue
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Gemini API request failed for '{candidate}': {e}")
+            last_error_msg = str(e)
+            continue
+
+    if "high demand" in last_error_msg.lower() or "503" in last_error_msg:
+        return (
+            "Gemini is currently experiencing high demand across Google servers (503). "
+            "Spikes in demand are temporary. You can select 'gemini-3.5-flash-lite' or "
+            "use the 'Mock' provider for instant testing."
+        )
+    return f"Gemini API Error: {last_error_msg or 'Service temporarily unavailable'}"
 
 
 def stream_gemini_api(
@@ -90,75 +125,82 @@ def stream_gemini_api(
 ) -> Iterator[str]:
     """
     Streams tokens in real time from Google Gemini API using alt=sse.
+    Includes automated fallback across candidate models if Google returns 503 high demand or 429.
     """
-    # Auto-remap deprecated models to latest recommended model
-    if model in ("gemini-2.0-flash", "gemini-2.0-flash-exp"):
-        model = "gemini-3.8-flash"
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?alt=sse&key={api_key}"
+    candidates = _resolve_gemini_candidates(model)
     headers = {"Content-Type": "application/json"}
-    
     payload: Dict[str, Any] = {
         "contents": [{"parts": [{"text": prompt}]}]
     }
-    
     if system_instruction:
         payload["systemInstruction"] = {"parts": [{"text": system_instruction}]}
-        
-    try:
-        # Connect timeout: 5s  |  Read timeout: 8s per chunk (within Vercel's 10s limit).
-        # iter_lines() resets the read timeout per chunk, so short per-read timeouts
-        # are safe for streaming without cutting off long responses.
-        with requests.post(
-            url, headers=headers, json=payload,
-            stream=True, timeout=(5, 8)
-        ) as response:
-            if response.status_code != 200:
-                try:
-                    err = response.json()
-                    yield f"Gemini API Error ({response.status_code}): {err.get('error', {}).get('message', response.text)}"
-                except Exception:
-                    yield f"Gemini API Error ({response.status_code}): {response.text}"
-                return
 
-            for line in response.iter_lines(decode_unicode=True):
-                if not line or not line.startswith("data: "):
-                    continue
-                data_str = line[6:].strip()
-                if not data_str:
-                    continue
-                try:
-                    data = json.loads(data_str)
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        for part in parts:
-                            text_chunk = part.get("text", "")
-                            if text_chunk:
-                                yield text_chunk
-                except Exception as ex:
-                    logger.debug(f"Gemini SSE parse skip: {ex}")
-    except requests.exceptions.Timeout:
-        # Streaming timed out — fall back to synchronous call which buffers the
-        # full response and is more forgiving of slow network conditions.
-        logger.warning("Gemini SSE streaming timed out; falling back to sync call")
+    last_error_msg = ""
+    for candidate in candidates:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{candidate}:streamGenerateContent?alt=sse&key={api_key}"
         try:
-            result = call_gemini_api(
-                prompt=prompt, api_key=api_key, model=model,
-                system_instruction=system_instruction
-            )
-            # Emit the full buffered response as a single token so the caller
-            # (SSE event loop) still gets a token + done event.
-            yield result
-        except Exception as fallback_err:
-            yield (
-                "The Gemini API timed out. On Vercel's free tier functions run for "
-                "at most 10 seconds. Use the Mock provider for instant responses, "
-                f"or try a shorter prompt. ({fallback_err})"
-            )
-    except Exception as e:
-        logger.error(f"Gemini streaming exception: {e}")
-        yield f"\n[Gemini Stream Error: {str(e)}]"
+            with requests.post(url, headers=headers, json=payload, stream=True, timeout=(5, 8)) as response:
+                if response.status_code == 200:
+                    yielded_any = False
+                    for line in response.iter_lines(decode_unicode=True):
+                        if not line or not line.startswith("data: "):
+                            continue
+                        data_str = line[6:].strip()
+                        if not data_str:
+                            continue
+                        try:
+                            data = json.loads(data_str)
+                            candidates_list = data.get("candidates", [])
+                            if candidates_list:
+                                parts = candidates_list[0].get("content", {}).get("parts", [])
+                                for part in parts:
+                                    text_chunk = part.get("text", "")
+                                    if text_chunk:
+                                        yield text_chunk
+                                        yielded_any = True
+                        except Exception as ex:
+                            logger.debug(f"Gemini SSE parse skip: {ex}")
+                    if yielded_any:
+                        return
+
+                err_details = {}
+                try:
+                    err_details = response.json().get("error", {})
+                except Exception:
+                    pass
+                err_msg = err_details.get("message", response.text)
+                last_error_msg = f"HTTP {response.status_code}: {err_msg}"
+
+                if response.status_code in (503, 429, 404) or "high demand" in err_msg.lower():
+                    logger.warning(
+                        f"Gemini stream '{candidate}' returned {response.status_code} ({err_msg}). "
+                        f"Switching to fallback model..."
+                    )
+                    continue
+                else:
+                    yield f"Gemini API Error ({response.status_code}): {err_msg}"
+                    return
+
+        except requests.exceptions.Timeout:
+            logger.warning(f"Gemini streaming timed out on '{candidate}'. Trying fallback...")
+            continue
+        except Exception as e:
+            logger.error(f"Gemini streaming exception on '{candidate}': {e}")
+            last_error_msg = str(e)
+            continue
+
+    # If stream looping didn't succeed, attempt sync call as final fallback
+    try:
+        sync_res = call_gemini_api(
+            prompt=prompt, api_key=api_key, model=model,
+            system_instruction=system_instruction
+        )
+        yield sync_res
+    except Exception as fallback_err:
+        yield (
+            f"Gemini API is currently experiencing high demand across Google servers (503). "
+            f"Please switch to 'gemini-3.5-flash-lite' or select the 'Mock' provider in the toolbar. ({fallback_err})"
+        )
 
 
 # =====================================================================
