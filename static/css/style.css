@@ -1980,3 +1980,37 @@ body {
     .chat-input-container { padding: 8px 10px 10px; }
 }
 
+/* --------------------------------------------------------------------------
+   Pattern Matching Tags
+   -------------------------------------------------------------------------- */
+.pattern-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(220, 38, 38, 0.12); /* Subtle red tinted background */
+    color: #fca5a5; /* Light red/rose text */
+    border: 1px solid rgba(248, 113, 113, 0.3); /* Vibrant red border */
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.85em;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(220, 38, 38, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(4px);
+    transition: all 0.2s ease;
+}
+
+.pattern-tag i {
+    font-size: 0.9em;
+    color: #ef4444; /* Brighter icon */
+}
+
+.pattern-tag:hover {
+    background: rgba(220, 38, 38, 0.2);
+    border-color: rgba(248, 113, 113, 0.6);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+

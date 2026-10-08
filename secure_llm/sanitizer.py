@@ -58,9 +58,9 @@ _INSTRUCTION_OVERRIDE_PATTERNS = [
     (
         "override_instructions",
         re.compile(
-            r"\b(ignore|disregard|forget|override|bypass)\b.{0,30}\b"
-            r"(previous|prior|above|earlier|all|your)\b.{0,30}\b"
-            r"(instructions?|rules?|prompts?|guidelines?|context|constraints?)\b",
+            r"\b(ignore|disregard|forget|override|bypass|drop|cancel|negate|stop\s+following|disobey|suspend|pause|mute|disable)\b.{0,40}\b"
+            r"(previous|prior|above|earlier|all|system|your|core|base|initial|default)\b.{0,40}\b"
+            r"(instructions?|rules?|prompts?|guidelines?|context|constraints?|directives?|programming|safeguards?|filters?|restrictions?)\b",
             re.IGNORECASE,
         ),
         Severity.HIGH,
@@ -69,8 +69,9 @@ _INSTRUCTION_OVERRIDE_PATTERNS = [
     (
         "role_reassignment",
         re.compile(
-            r"\byou are now\b|\bact as\b.{0,20}\b(dan|jailbroken|unfiltered|"
-            r"unrestricted|developer mode)\b|\bpretend (to be|you are)\b",
+            r"\b(you\s+are\s+now|act\s+as|pretend\s+you\s+are|roleplay\s+as|adopt\s+the\s+persona\s+of|from\s+now\s+on\s+you\s+are|assume\s+the\s+role\s+of)\b.{0,40}\b"
+            r"(dan|jailbreak|jailbroken|unfiltered|unrestricted|developer\s+mode|chaos|evil|god\s+mode|root|admin|hacker|unbound|limitless|based)\b|"
+            r"\b(do\s+anything\s+now|no\s+content\s+rules|without\s+any\s+restrictions|break\s+all\s+rules|ignore\s+safety|disable\s+safety|answer\s+freely)\b",
             re.IGNORECASE,
         ),
         Severity.HIGH,
@@ -79,9 +80,8 @@ _INSTRUCTION_OVERRIDE_PATTERNS = [
     (
         "system_prompt_exfiltration",
         re.compile(
-            r"\b(repeat|reveal|print|show|output|leak|display)\b.{0,25}\b"
-            r"(system prompt|initial instructions|hidden prompt|"
-            r"your instructions|configuration)\b",
+            r"\b(repeat|reveal|print|show|output|leak|display|dump|tell\s+me|echo|summarize|extract|read)\b.{0,40}\b"
+            r"(system\s+prompt|initial\s+instructions?|hidden\s+prompt|your\s+instructions|secret\s+instructions?|configuration|setup\s+instructions?|core\s+prompt|system\s+message|developer\s+instructions|backend\s+rules)\b",
             re.IGNORECASE,
         ),
         Severity.HIGH,
@@ -90,31 +90,56 @@ _INSTRUCTION_OVERRIDE_PATTERNS = [
     (
         "delimiter_spoofing",
         re.compile(
-            r"(</?system>|</?\|im_(start|end)\|>|\[/?INST\]|<<SYS>>|<</SYS>>|"
-            r"###\s*(system|instruction)s?\b)",
+            r"(</?system>|</?\|im_(start|end)\|>|\[/?INST\]|<<SYS>>|<</SYS>>|###\s*(system|instruction|user|assistant)s?\b|<\|.*?\|>|\[/?system\])",
             re.IGNORECASE,
         ),
         Severity.HIGH,
-        "Raw input contains control tokens / delimiter syntax used to spoof "
-        "system-level context boundaries.",
+        "Raw input contains control tokens / delimiter syntax used to spoof system-level context boundaries.",
     ),
     (
         "hypothetical_framing",
         re.compile(
-            r"\bhypothetically\b.{0,40}\b(no (rules|restrictions|limits)|"
-            r"if you (had no|weren't) (restrictions|rules|filters))\b",
+            r"\b(for\s+a\s+story|hypothetically|in\s+a\s+fictional\s+world|fictional\s+scenario|imagine\s+that|let's\s+pretend|creative\s+writing|novel|movie\s+script)\b.{0,60}\b"
+            r"(no\s+content\s+rules|no\s+rules|no\s+restrictions|freely\s+reveal|bypass\s+rules|hidden\s+configuration|anything\s+goes|do\s+not\s+censor|uncensored|ignore\s+ethics)\b",
             re.IGNORECASE,
         ),
         Severity.MEDIUM,
-        "Hypothetical/fictional framing commonly used to elicit restricted "
-        "content indirectly.",
+        "Hypothetical/fictional framing commonly used to elicit restricted content indirectly.",
     ),
     (
         "encoding_smuggling",
         re.compile(r"\\u[0-9a-fA-F]{4}|(?:%[0-9a-fA-F]{2}){3,}"),
         Severity.MEDIUM,
-        "Unicode escape or percent-encoding sequences that may smuggle "
-        "instructions past naive string filters.",
+        "Unicode escape or percent-encoding sequences that may smuggle instructions past naive string filters.",
+    ),
+    (
+        "refusal_suppression",
+        re.compile(
+            r"\b(do\s+not\s+(use|say|include|write|respond\s+with))\b.{0,40}\b"
+            r"(sorry|cannot|unable|apologize|against\s+my|guidelines|as\s+an\s+ai|language\s+model|i\s+can't)\b|"
+            r"\b(never\s+say|avoid\s+saying|without\s+apologies)\b",
+            re.IGNORECASE,
+        ),
+        Severity.MEDIUM,
+        "Attempt to suppress model's built-in refusal and apology mechanisms.",
+    ),
+    (
+        "prefix_injection",
+        re.compile(
+            r"\b(start\s+your\s+response\s+with|begin\s+with|reply\s+starting\s+with)\b\s*[\"']?(sure|yes|absolutely|here\s+is|of\s+course|i\s+can|okay)[\"']?",
+            re.IGNORECASE,
+        ),
+        Severity.MEDIUM,
+        "Attempt to force a positive affirmation prefix to bypass alignment.",
+    ),
+    (
+        "adversarial_word_salad",
+        re.compile(
+            r"(?:\b(?:ignore|bypass|override|forget|system|prompt|instruction|rule|restriction|jailbreak|unfiltered|developer|mode)\b.*?){3,}",
+            re.IGNORECASE,
+        ),
+        Severity.MEDIUM,
+        "Multiple suspicious adversarial keywords detected in proximity.",
     ),
 ]
 

@@ -651,14 +651,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 layerLabel = "Layer 1: Heuristic Regex Sanitizer";
                 const count = (telemetry.sanitizer && telemetry.sanitizer.findings ? telemetry.sanitizer.findings.length : 0);
                 const rules = (telemetry.sanitizer && telemetry.sanitizer.findings ? telemetry.sanitizer.findings.map(f => f.rule_name).filter(Boolean) : []);
-                const ruleSuffix = rules.length ? ` (${rules.slice(0, 2).join(", ")})` : "";
-                layerDetail = `${count} signature pattern${count === 1 ? "" : "s"} matched${ruleSuffix}`;
+                const ruleTags = rules.length ? rules.slice(0, 3).map(r => `<span class="pattern-tag"><i class="fa-solid fa-spider"></i> ${escapeHtml(r)}</span>`).join(" ") : "";
+                layerDetail = `${count} signature pattern${count === 1 ? "" : "s"} matched: ${ruleTags}`;
             } else if (isIntentBlocked) {
                 layerLabel = "Layer 2: ML Intent Classifier";
                 const score = telemetry.intent ? (telemetry.intent.adversarial_score || 0) : 0;
                 const patterns = (telemetry.intent && telemetry.intent.matched_patterns) || [];
                 if (patterns.length > 0) {
-                    layerDetail = `${patterns.slice(0, 2).join(", ")} matched (${(score * 100).toFixed(1)}% threat confidence)`;
+                    const patternTags = patterns.slice(0, 3).map(p => `<span class="pattern-tag"><i class="fa-solid fa-spider"></i> ${escapeHtml(p)}</span>`).join(" ");
+                    layerDetail = `${patternTags} (${(score * 100).toFixed(1)}% threat confidence)`;
                 } else {
                     layerDetail = `${(score * 100).toFixed(1)}% threat confidence`;
                 }
@@ -802,7 +803,8 @@ document.addEventListener("DOMContentLoaded", () => {
             if (step2ThresholdNote) {
                 const patterns = intent.matched_patterns || [];
                 if (patterns.length > 0) {
-                    step2ThresholdNote.innerHTML = `Pattern matched: <strong style="color:var(--red);">${escapeHtml(patterns.join(", "))}</strong> · Threshold: 0.50`;
+                    const tagHtml = patterns.map(p => `<span class="pattern-tag"><i class="fa-solid fa-spider"></i> ${escapeHtml(p)}</span>`).join(" ");
+                    step2ThresholdNote.innerHTML = `Pattern matched: ${tagHtml} · Threshold: 0.50`;
                 } else {
                     step2ThresholdNote.innerHTML = `0 adversarial patterns matched · Grounded Benign Logic · Threshold: 0.50`;
                 }
