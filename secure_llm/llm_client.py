@@ -141,6 +141,7 @@ def stream_gemini_api(
         try:
             with requests.post(url, headers=headers, json=payload, stream=True, timeout=(5, 8)) as response:
                 if response.status_code == 200:
+                    response.encoding = "utf-8"
                     yielded_any = False
                     for line in response.iter_lines(decode_unicode=True):
                         if not line or not line.startswith("data: "):
@@ -289,6 +290,7 @@ def stream_openai_api(
                     yield f"OpenAI API Error ({response.status_code}): {response.text}"
                 return
 
+            response.encoding = "utf-8"
             for line in response.iter_lines(decode_unicode=True):
                 if not line or not line.startswith("data: "):
                     continue
@@ -394,6 +396,7 @@ def stream_claude_api(
                     yield f"Claude API Error ({response.status_code}): {response.text}"
                 return
 
+            response.encoding = "utf-8"
             for line in response.iter_lines(decode_unicode=True):
                 if not line or not line.startswith("data: "):
                     continue

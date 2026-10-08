@@ -449,7 +449,7 @@ def process_prompt_stream():
 
         yield f"event: done\ndata: {json.dumps({'full_text': ''.join(accumulated)})}\n\n"
 
-    response = Response(stream_with_context(generate_events()), mimetype="text/event-stream")
+    response = Response(stream_with_context(generate_events()), mimetype="text/event-stream; charset=utf-8")
     response.headers["Cache-Control"] = "no-cache"
     response.headers["X-Accel-Buffering"] = "no"
     return response
