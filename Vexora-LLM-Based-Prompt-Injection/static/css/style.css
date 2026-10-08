@@ -115,11 +115,11 @@ body {
     left: -5%;
     width: 110%;
     height: 110%;
-    background-image: url('../cyber_backdrop.jpg');
+    background-image: url('../cyber_backdrop.jpg?v=2');
     background-size: cover;
-    background-position: center 30%;
-    opacity: 0.35;
-    filter: saturate(1.2) contrast(1.15) brightness(0.9);
+    background-position: center;
+    opacity: 0.75;
+    filter: saturate(1.1) brightness(1.1);
     transform: translate3d(var(--bg-parallax-x, 0px), var(--bg-parallax-y, 0px), 0) scale(1.03);
     transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s ease;
     will-change: transform;
