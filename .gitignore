@@ -1,10 +1,17 @@
 # Environment variables - never commit this!
 .env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
-*.pkl
 *.parquet
 model/*.parquet
-# Binary artifacts - rebuild from source
-secure_llm.zip
 *.zip
+secure_llm.zip
+
+# Model files: allow the pre-trained classifier
+*.pkl
+!model/intent_classifier.pkl
+
+# Vercel deployment cache
+.vercel/

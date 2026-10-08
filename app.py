@@ -24,12 +24,23 @@ from secure_llm.llm_client import (
 )
 from train_model import maybe_load_pretrained, register_train_route
 
-app = Flask(__name__)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, "templates"),
+    static_folder=os.path.join(BASE_DIR, "static"),
+    static_url_path="/static"
+)
 
 # ---------------------------------------------------------------------------
 # Training route — POST /api/train triggers re-download + re-train + hot-swap
 # ---------------------------------------------------------------------------
-register_train_route(app, _proxy_cache := {})
+_proxy_cache = {}
+try:
+    register_train_route(app, _proxy_cache)
+except Exception as e:
+    pass
 
 # ---------------------------------------------------------------------------
 # CORS — allow browser extensions (chrome-extension://*) to call local Flask
@@ -216,11 +227,14 @@ def _parse_tool_context(raw_list: list) -> list:
     return blocks
 
 
-@app.route("/api/process", methods=["POST"])
+@app.route("/api/process", methods=["POST", "OPTIONS"])
 def process_prompt():
     """
     Synchronous prompt processing endpoint.
     """
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
+
     data = request.json or {}
     system_rules = data.get("system_rules", MOCK_SYSTEM_RULES)
     user_input = data.get("user_input", "")
@@ -304,12 +318,15 @@ def process_prompt():
     })
 
 
-@app.route("/api/process/stream", methods=["POST"])
+@app.route("/api/process/stream", methods=["POST", "OPTIONS"])
 def process_prompt_stream():
     """
     Real-Time Server-Sent Events (SSE) Streaming Endpoint.
     Executes background defenses, emits telemetry metadata, and streams tokens live.
     """
+    if request.method == "OPTIONS":
+        return jsonify({}), 200
+
     data = request.json or {}
     system_rules = data.get("system_rules", MOCK_SYSTEM_RULES)
     user_input = data.get("user_input", "")
@@ -400,7 +417,10 @@ def process_prompt_stream():
 
         yield f"event: done\ndata: {json.dumps({'full_text': ''.join(accumulated)})}\n\n"
 
-    return Response(stream_with_context(generate_events()), mimetype="text/event-stream")
+    response = Response(stream_with_context(generate_events()), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["X-Accel-Buffering"] = "no"
+    return response
 
 
 if __name__ == "__main__":

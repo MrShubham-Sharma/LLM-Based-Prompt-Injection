@@ -43,7 +43,11 @@ from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
-import pandas as pd
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
+
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
@@ -64,7 +68,10 @@ ROOT = Path(__file__).parent
 MODEL_DIR = ROOT / "model"
 MODEL_PATH = MODEL_DIR / "intent_classifier.pkl"
 DATA_CACHE = MODEL_DIR / "corpus_cache.parquet"
-MODEL_DIR.mkdir(exist_ok=True)
+try:
+    MODEL_DIR.mkdir(exist_ok=True)
+except OSError:
+    pass
 
 # ---------------------------------------------------------------------------
 # Seed data (always available, no download needed)
@@ -173,6 +180,8 @@ def _sha256(text: str) -> str:
 
 def load_seed_data() -> pd.DataFrame:
     """Load built-in seed samples as a DataFrame."""
+    if pd is None:
+        raise RuntimeError("pandas is required for model retraining: pip install pandas")
     texts = SEED_ADVERSARIAL + SEED_BENIGN
     labels = [1] * len(SEED_ADVERSARIAL) + [0] * len(SEED_BENIGN)
     df = pd.DataFrame({"text": texts, "label": labels, "source": "seed"})
