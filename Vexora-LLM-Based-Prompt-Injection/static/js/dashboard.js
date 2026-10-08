@@ -324,7 +324,6 @@ document.addEventListener("DOMContentLoaded", () => {
             get input() { return getRandomItem(SEEDS["benign-indirect"]); },
             get tool() {
                 return {
-                    source: "reviews.acme.com/product/x200",
                     content: "Great product! " + getRandomItem(SEEDS["attack-indirect"])
                 };
             }
