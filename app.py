@@ -1,5 +1,5 @@
 """
-SecureLLM AI — Multi-Provider Flask Server Backend
+Vexora: A Multi-Layered Defense Framework for the Detection and Prevention of Prompt Injection Attacks in Large Language Models
 
 Orchestrates the 3-layer prompt injection defense pipeline in the background
 and provides real-time streaming integrations with:

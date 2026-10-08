@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "SecureLLM — Prompt Injection Shield",
+  "name": "Vexora — Prompt Injection Defense Shield",
   "version": "1.0.0",
   "description": "Screens every prompt on ChatGPT, Gemini, and Claude for prompt injection attacks using 3 defense layers.",
   "permissions": [
@@ -33,7 +33,7 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "SecureLLM Shield",
+    "default_title": "Vexora Shield",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",

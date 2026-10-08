@@ -1,7 +1,6 @@
-# SecureLLM AI — Multi-Layered Prompt Injection Defense
+# Vexora: A Multi-Layered Defense Framework for the Detection and Prevention of Prompt Injection Attacks in Large Language Models
 
-A proxy-style defense framework that intercepts and neutralizes prompt
-injection attacks before they reach the underlying LLM.
+A proxy-style multi-layered defense framework that detects, intercepts, and neutralizes prompt injection attacks before they reach underlying LLMs.
 
 ## Architecture
 

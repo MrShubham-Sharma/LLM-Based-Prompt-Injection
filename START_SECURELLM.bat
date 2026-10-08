@@ -1,12 +1,12 @@
 @echo off
-title SecureLLM Shield Launcher
+title Vexora Shield Launcher
 color 0A
 
 echo.
-echo  ============================================
-echo   SecureLLM - Prompt Injection Shield
+echo  ========================================================================
+echo   Vexora: Multi-Layered Prompt Injection Defense Framework
 echo   Starting Flask backend + Edge with extension
-echo  ============================================
+echo  ========================================================================
 echo.
 
 REM Step 1: Start Flask backend in background
@@ -17,7 +17,7 @@ REM Wait 3 seconds for Flask to boot
 timeout /t 3 /nobreak > nul
 
 REM Step 2: Launch Edge with extension pre-loaded + open ChatGPT
-echo  [2/2] Launching Edge with SecureLLM extension...
+echo  [2/2] Launching Edge with Vexora extension...
 start "" "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" ^
   --load-extension="C:\Users\ss988\OneDrive\LLM-Based-Prompt-Injection-main\browser-extension" ^
   --no-first-run ^
@@ -25,7 +25,7 @@ start "" "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" ^
   "https://chatgpt.com"
 
 echo.
-echo  Done! Edge is opening with SecureLLM active.
+echo  Done! Edge is opening with Vexora active.
 echo  - Look for the shield badge when you type on ChatGPT
 echo  - Also works on gemini.google.com and claude.ai
 echo.

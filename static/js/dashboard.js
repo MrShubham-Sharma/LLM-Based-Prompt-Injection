@@ -1,5 +1,6 @@
 /**
- * SecureLLM AI — Real-Time Multi-LLM Dashboard & Background Defense Controller
+ * Vexora: A Multi-Layered Defense Framework for the Detection and Prevention of Prompt Injection Attacks in Large Language Models
+ * Real-Time Multi-LLM Dashboard & Background Defense Controller
  *
  * Supports live real-time token streaming with:
  * - Google Gemini (gemini-3.8-flash, gemini-2.5-flash, gemini-1.5-pro)
@@ -378,7 +379,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(telemetryHistory, null, 2));
             const downloadAnchor = document.createElement("a");
             downloadAnchor.setAttribute("href", dataStr);
-            downloadAnchor.setAttribute("download", `securellm_telemetry_audit_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`);
+            downloadAnchor.setAttribute("download", `vexora_telemetry_audit_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.json`);
             document.body.appendChild(downloadAnchor);
             downloadAnchor.click();
             downloadAnchor.remove();

@@ -238,6 +238,11 @@ body {
     color: var(--text-3);
     display: block;
     margin-top: -1px;
+    max-width: min(50vw, 680px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    letter-spacing: -0.1px;
 }
 
 /* Defense status indicator */
