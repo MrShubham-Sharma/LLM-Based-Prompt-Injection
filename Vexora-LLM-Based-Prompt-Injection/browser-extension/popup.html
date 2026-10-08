@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vexora</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-root">
+
+    <!-- Header -->
+    <header class="popup-header">
+      <div class="brand">
+        <span class="brand-icon">🛡️</span>
+        <div>
+          <div class="brand-name">Vexora</div>
+          <div class="brand-sub">Prompt Injection Shield</div>
+        </div>
+      </div>
+      <!-- On/Off toggle -->
+      <label class="toggle-pill" title="Enable or disable Vexora on this tab">
+        <input type="checkbox" id="enable-toggle" checked>
+        <span class="toggle-track">
+          <span class="toggle-thumb"></span>
+        </span>
+        <span class="toggle-label" id="toggle-label">On</span>
+      </label>
+    </header>
+
+    <!-- Server Status -->
+    <div class="status-bar" id="status-bar">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-text">Connecting to Flask server...</span>
+    </div>
+
+    <!-- Stats -->
+    <section class="stats-row">
+      <div class="stat-box">
+        <span class="stat-num" id="stat-total">0</span>
+        <span class="stat-label">Screened</span>
+      </div>
+      <div class="stat-box stat-warn">
+        <span class="stat-num" id="stat-flagged">0</span>
+        <span class="stat-label">Flagged</span>
+      </div>
+      <div class="stat-box stat-danger">
+        <span class="stat-num" id="stat-blocked">0</span>
+        <span class="stat-label">Blocked</span>
+      </div>
+    </section>
+
+    <!-- Settings -->
+    <section class="settings-section">
+      <label class="setting-row" for="threshold-slider">
+        <span class="setting-label">Sensitivity</span>
+        <div class="slider-wrap">
+          <input type="range" id="threshold-slider" min="0.1" max="0.9" step="0.05" value="0.5">
+          <span class="slider-val" id="threshold-val">0.50</span>
+        </div>
+      </label>
+      <p class="setting-hint">Lower = more aggressive blocking. Default: 0.50</p>
+    </section>
+
+    <!-- Active on -->
+    <section class="sites-section">
+      <div class="sites-title">Active on</div>
+      <div class="sites-list">
+        <span class="site-chip" id="chip-chatgpt">ChatGPT</span>
+        <span class="site-chip" id="chip-gemini">Gemini</span>
+        <span class="site-chip" id="chip-claude">Claude</span>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="popup-footer">
+      <button id="btn-reset" class="footer-btn">Reset stats</button>
+      <a href="http://127.0.0.1:5000" target="_blank" class="footer-link">Open dashboard ↗</a>
+    </footer>
+
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
