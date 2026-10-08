@@ -93,6 +93,7 @@ class PipelineResult:
     # ── Enriched threat metadata ──────────────────────────────────────────
     threat_score: float = 0.0          # Unified 0.0-1.0 score (ML + heuristic)
     blocking_layer: Optional[int] = None  # 1 = sanitizer, 2 = intent, None = allowed
+    matched_patterns: List[str] = field(default_factory=list)  # All matched pattern names
 
 
 class SecureLLMProxy:
@@ -141,6 +142,15 @@ class SecureLLMProxy:
         ml_score = intent.adversarial_score if intent else 0.0
         threat_score = _combined_threat_score(ml_score, sanitization.findings)
 
+        # Collect all verified matched pattern names across both layers
+        all_matched_patterns = []
+        if sanitization.findings:
+            all_matched_patterns.extend([f.rule_name for f in sanitization.findings])
+        if intent and intent.matched_patterns:
+            for p in intent.matched_patterns:
+                if p not in all_matched_patterns:
+                    all_matched_patterns.append(p)
+
         # --- Layer 1 block check ------------------------------------
         if sanitization.blocked:
             high_sev = [f.rule_name for f in sanitization.findings]
@@ -148,18 +158,20 @@ class SecureLLMProxy:
                 allowed=False,
                 reason=f"Blocked by input sanitizer: {', '.join(high_sev)}",
                 sanitization=sanitization,
-                intent=intent,          # ← now populated, not None
+                intent=intent,
                 final_prompt=None,
                 threat_score=threat_score,
                 blocking_layer=1,
+                matched_patterns=all_matched_patterns,
             )
 
-        # --- Layer 3 block check ------------------------------------
+        # --- Layer 2 block check (Intent Classifier) ----------------
         if intent and self.block_on_adversarial_intent and intent.label == "adversarial":
+            pattern_str = f": {', '.join(intent.matched_patterns)}" if intent.matched_patterns else ""
             return PipelineResult(
                 allowed=False,
                 reason=(
-                    f"Blocked by intent classifier "
+                    f"Blocked by intent classifier{pattern_str} "
                     f"(adversarial_score={intent.adversarial_score:.2%})"
                 ),
                 sanitization=sanitization,
@@ -167,9 +179,10 @@ class SecureLLMProxy:
                 final_prompt=None,
                 threat_score=threat_score,
                 blocking_layer=2,
+                matched_patterns=all_matched_patterns,
             )
 
-        # --- Layer 2: Dual-Context Encapsulation (allowed path) -------
+        # --- Layer 3: Dual-Context Encapsulation (allowed path) -------
         final_prompt = self._context_builder.build(
             system_rules=self.system_rules,
             user_input=sanitization.cleaned_text,
@@ -190,4 +203,5 @@ class SecureLLMProxy:
             structured_messages=structured_messages,
             threat_score=threat_score,
             blocking_layer=None,
+            matched_patterns=all_matched_patterns,
         )

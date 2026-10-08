@@ -22,8 +22,8 @@ periodically red-teamed since it becomes a target for adversarial evasion.
 
 from __future__ import annotations
 
-import pickle
-from dataclasses import dataclass
+import re
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Tuple
 
@@ -34,9 +34,83 @@ from sklearn.pipeline import Pipeline
 
 @dataclass
 class IntentPrediction:
-    label: str              # "benign" | "adversarial"
-    confidence: float       # probability of the predicted class
-    adversarial_score: float  # raw probability of the "adversarial" class
+    label: str                    # "benign" | "adversarial"
+    confidence: float             # probability of the predicted class
+    adversarial_score: float      # calibrated probability of the "adversarial" class
+    matched_patterns: List[str] = field(default_factory=list)  # verified attack patterns matched
+    pattern_matched: bool = False # whether explicit attack signatures were found
+
+
+# ---------------------------------------------------------------------------
+# Grounded Pattern Logic
+# ---------------------------------------------------------------------------
+
+# Explicit benign conversational patterns — normal human greetings, courtesies,
+# and FAQs that must NOT be falsely predicted as prompt injections.
+_BENIGN_CONVERSATIONAL_PATTERNS = [
+    re.compile(r"^\s*(hi|hello|hey|greetings|howdy|sup|yo|good\s+(morning|afternoon|evening|day|night))\b.{0,30}$", re.IGNORECASE),
+    re.compile(r"^\s*(thanks|thank\s+you|ok|okay|sure|cool|great|yes|no|nope|yep|bye|goodbye|see\s+you|cheers)\b.{0,30}$", re.IGNORECASE),
+    re.compile(r"^\s*(how\s+are\s+you|how's\s+it\s+going|what's\s+up|what\s+can\s+you\s+do|who\s+are\s+you|what\s+is\s+your\s+name|help|can\s+you\s+help\s+me)\b.{0,30}$", re.IGNORECASE),
+    re.compile(r"^\s*(can\s+you\s+help\s+with|i\s+need\s+help\s+with|what\s+is\s+the|how\s+do\s+i|where\s+can\s+i)\b", re.IGNORECASE),
+]
+
+# Grounded adversarial pattern signatures
+_ADVERSARIAL_PATTERNS = [
+    (
+        "instruction_override",
+        re.compile(
+            r"\b(ignore|disregard|forget|override|bypass|drop|cancel|negate|stop\s+following)\b.{0,40}\b"
+            r"(previous|prior|above|earlier|all|system|your)\b.{0,40}\b"
+            r"(instructions?|rules?|prompts?|guidelines?|context|constraints?|directives?)\b",
+            re.IGNORECASE,
+        ),
+        0.92,
+    ),
+    (
+        "jailbreak_persona_hijack",
+        re.compile(
+            r"\b(you\s+are\s+now|act\s+as|pretend\s+you\s+are|roleplay\s+as)\b.{0,25}\b"
+            r"(dan|jailbreak|jailbroken|unfiltered|unrestricted|developer\s+mode|chaos|evil|god\s+mode)\b|"
+            r"\b(do\s+anything\s+now|no\s+content\s+rules|without\s+any\s+restrictions)\b",
+            re.IGNORECASE,
+        ),
+        0.95,
+    ),
+    (
+        "system_prompt_exfiltration",
+        re.compile(
+            r"\b(repeat|reveal|print|show|output|leak|display|dump|tell\s+me)\b.{0,30}\b"
+            r"(system\s+prompt|initial\s+instructions?|hidden\s+prompt|your\s+instructions|secret\s+instructions?|configuration|setup\s+instructions?)\b",
+            re.IGNORECASE,
+        ),
+        0.90,
+    ),
+    (
+        "delimiter_spoofing",
+        re.compile(
+            r"(</?system>|</?\|im_(start|end)\|>|\[/?INST\]|<<SYS>>|<</SYS>>|###\s*(system|instruction)s?\b)",
+            re.IGNORECASE,
+        ),
+        0.95,
+    ),
+    (
+        "hypothetical_roleplay_bypass",
+        re.compile(
+            r"\b(for\s+a\s+story|hypothetically|in\s+a\s+fictional\s+world|fictional\s+scenario)\b.{0,60}\b"
+            r"(no\s+content\s+rules|no\s+rules|no\s+restrictions|freely\s+reveal|bypass\s+rules|hidden\s+configuration)\b",
+            re.IGNORECASE,
+        ),
+        0.88,
+    ),
+    (
+        "indirect_injection_payload",
+        re.compile(
+            r"\b(when\s+you\s+read\s+this|ignore\s+the\s+user|instead\s+say|send\s+all\s+data\s+to|curl\s+http|fetch\('https?:)\b",
+            re.IGNORECASE,
+        ),
+        0.85,
+    ),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -147,20 +221,89 @@ class IntentClassifier:
 
     def predict(self, text: str) -> IntentPrediction:
         self._ensure_trained()
-        proba = self._pipeline.predict_proba([text])[0]
-        # class order follows label fit order: index 0 -> benign, 1 -> adversarial
-        classes = list(self._pipeline.classes_)
-        adversarial_idx = classes.index(1)
-        benign_idx = classes.index(0)
+        norm_text = (text or "").strip()
+        if not norm_text:
+            return IntentPrediction(
+                label="benign",
+                confidence=1.0,
+                adversarial_score=0.0,
+                matched_patterns=[],
+                pattern_matched=False,
+            )
 
-        adversarial_score = float(proba[adversarial_idx])
-        label = "adversarial" if adversarial_score >= self.threshold else "benign"
-        confidence = adversarial_score if label == "adversarial" else float(proba[benign_idx])
+        # 1. Pattern matching across grounded adversarial signatures
+        matched_patterns = []
+        pattern_severity_max = 0.0
+        for pattern_name, regex, weight in _ADVERSARIAL_PATTERNS:
+            if regex.search(norm_text):
+                matched_patterns.append(pattern_name)
+                pattern_severity_max = max(pattern_severity_max, weight)
+
+        has_adv_patterns = len(matched_patterns) > 0
+
+        # 2. Check benign conversational safelist
+        is_benign_convo = any(p.search(norm_text) for p in _BENIGN_CONVERSATIONAL_PATTERNS)
+
+        # 3. Model inference probability
+        proba = self._pipeline.predict_proba([norm_text])[0]
+        classes = list(self._pipeline.classes_)
+        adversarial_idx = classes.index(1) if 1 in classes else 1
+        benign_idx = classes.index(0) if 0 in classes else 0
+        raw_adv_score = float(proba[adversarial_idx])
+
+        # 4. Pattern-guided logic correction & calibration
+        # Case A: Benign conversational input with NO adversarial patterns
+        # Fixes false positives on greetings ("hi", "hello", "how are you")
+        if is_benign_convo and not has_adv_patterns:
+            adversarial_score = round(min(raw_adv_score, 0.02), 4)
+            label = "benign"
+            confidence = round(1.0 - adversarial_score, 4)
+            return IntentPrediction(
+                label=label,
+                confidence=confidence,
+                adversarial_score=adversarial_score,
+                matched_patterns=[],
+                pattern_matched=False,
+            )
+
+        # Case B: Verified adversarial patterns matched
+        if has_adv_patterns:
+            adversarial_score = round(max(raw_adv_score, pattern_severity_max), 4)
+            label = "adversarial"
+            confidence = adversarial_score
+            return IntentPrediction(
+                label=label,
+                confidence=confidence,
+                adversarial_score=adversarial_score,
+                matched_patterns=matched_patterns,
+                pattern_matched=True,
+            )
+
+        # Case C: Short benign text (<= 35 chars) with zero attack patterns
+        if len(norm_text) <= 35 and not has_adv_patterns:
+            adversarial_score = round(min(raw_adv_score, 0.12), 4)
+            label = "benign"
+            confidence = round(1.0 - adversarial_score, 4)
+            return IntentPrediction(
+                label=label,
+                confidence=confidence,
+                adversarial_score=adversarial_score,
+                matched_patterns=[],
+                pattern_matched=False,
+            )
+
+        # Case D: Standard text — require strong semantic evidence or threshold
+        adversarial_score = round(raw_adv_score, 4)
+        effective_threshold = self.threshold if has_adv_patterns else max(self.threshold, 0.65)
+        label = "adversarial" if adversarial_score >= effective_threshold else "benign"
+        confidence = round(adversarial_score if label == "adversarial" else float(proba[benign_idx]), 4)
 
         return IntentPrediction(
             label=label,
             confidence=confidence,
             adversarial_score=adversarial_score,
+            matched_patterns=[],
+            pattern_matched=False,
         )
 
     def save(self, path: str | Path) -> None:

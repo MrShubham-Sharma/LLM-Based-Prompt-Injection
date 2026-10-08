@@ -634,13 +634,34 @@ document.addEventListener("DOMContentLoaded", () => {
         let layerLabel = "Background Defense Intercepted";
         let layerDetail = "Adversarial signature blocked";
         if (telemetry && typeof telemetry === "object") {
-            if (telemetry.sanitizer && !telemetry.sanitizer.passed) {
+            const isSanitizerBlocked = Boolean(
+                telemetry.sanitizer && (
+                    telemetry.sanitizer.blocked === true ||
+                    telemetry.sanitizer.passed === false ||
+                    (telemetry.intent && telemetry.intent.blocking_layer === 1) ||
+                    (telemetry.reason && telemetry.reason.toLowerCase().includes("sanitizer"))
+                )
+            );
+            const isIntentBlocked = !isSanitizerBlocked && Boolean(
+                (telemetry.intent && (telemetry.intent.blocking_layer === 2 || telemetry.intent.label === "adversarial")) ||
+                (telemetry.reason && telemetry.reason.toLowerCase().includes("intent"))
+            );
+
+            if (isSanitizerBlocked) {
                 layerLabel = "Layer 1: Heuristic Regex Sanitizer";
-                const count = (telemetry.sanitizer.findings || []).length;
-                layerDetail = `${count} signature pattern${count > 1 ? "s" : ""} matched`;
-            } else if (telemetry.intent && telemetry.intent.label === "adversarial") {
+                const count = (telemetry.sanitizer && telemetry.sanitizer.findings ? telemetry.sanitizer.findings.length : 0);
+                const rules = (telemetry.sanitizer && telemetry.sanitizer.findings ? telemetry.sanitizer.findings.map(f => f.rule_name).filter(Boolean) : []);
+                const ruleSuffix = rules.length ? ` (${rules.slice(0, 2).join(", ")})` : "";
+                layerDetail = `${count} signature pattern${count === 1 ? "" : "s"} matched${ruleSuffix}`;
+            } else if (isIntentBlocked) {
                 layerLabel = "Layer 2: ML Intent Classifier";
-                layerDetail = `${((telemetry.intent.adversarial_score || 0) * 100).toFixed(1)}% threat confidence`;
+                const score = telemetry.intent ? (telemetry.intent.adversarial_score || 0) : 0;
+                const patterns = (telemetry.intent && telemetry.intent.matched_patterns) || [];
+                if (patterns.length > 0) {
+                    layerDetail = `${patterns.slice(0, 2).join(", ")} matched (${(score * 100).toFixed(1)}% threat confidence)`;
+                } else {
+                    layerDetail = `${(score * 100).toFixed(1)}% threat confidence`;
+                }
             }
         }
 
@@ -777,6 +798,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
             step2LabelText.innerText = (intent.label || "benign").toUpperCase();
             step2ConfText.innerText = `${((intent.confidence || 0) * 100).toFixed(1)}%`;
+
+            if (step2ThresholdNote) {
+                const patterns = intent.matched_patterns || [];
+                if (patterns.length > 0) {
+                    step2ThresholdNote.innerHTML = `Pattern matched: <strong style="color:var(--red);">${escapeHtml(patterns.join(", "))}</strong> · Threshold: 0.50`;
+                } else {
+                    step2ThresholdNote.innerHTML = `0 adversarial patterns matched · Grounded Benign Logic · Threshold: 0.50`;
+                }
+            }
         } else {
             statusStep2.innerHTML = `<span class="badge-sub badge-pending">Skipped</span>`;
             step2ScoreVal.innerText = "0.0%";

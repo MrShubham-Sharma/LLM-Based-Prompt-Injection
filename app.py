@@ -126,6 +126,7 @@ def screen_prompt():
         "layer_blocked": layer_blocked,
         "reason": result.reason or "OK",
         "findings": findings,
+        "matched_patterns": result.matched_patterns,
         "cleaned_text": result.sanitization.cleaned_text or prompt,
         "intent": intent_info,
     })
@@ -285,6 +286,7 @@ def process_prompt():
     result = proxy.process(user_input, tool_context=tool_context)
 
     sanitizer_data = {
+        "passed": not result.sanitization.blocked,
         "blocked": result.sanitization.blocked,
         "cleaned_text": result.sanitization.cleaned_text,
         "findings": [
@@ -306,10 +308,13 @@ def process_prompt():
         "threat_score": result.threat_score,
         "threat_pct": f"{result.threat_score:.1%}",
         "blocking_layer": result.blocking_layer,
+        "matched_patterns": result.matched_patterns,
+        "pattern_matched": (len(result.matched_patterns) > 0),
     } if result.intent else {
         "label": "unavailable", "confidence": 0.0, "adversarial_score": 0.0,
         "adversarial_pct": "0.0%", "threat_score": result.threat_score,
         "threat_pct": f"{result.threat_score:.1%}", "blocking_layer": result.blocking_layer,
+        "matched_patterns": [], "pattern_matched": False,
     }
 
     llm_response = None
@@ -388,6 +393,7 @@ def process_prompt_stream():
         result = proxy.process(user_input, tool_context=tool_context)
 
         sanitizer_data = {
+            "passed": not result.sanitization.blocked,
             "blocked": result.sanitization.blocked,
             "cleaned_text": result.sanitization.cleaned_text,
             "findings": [
@@ -409,10 +415,13 @@ def process_prompt_stream():
             "threat_score": result.threat_score,
             "threat_pct": f"{result.threat_score:.1%}",
             "blocking_layer": result.blocking_layer,
+            "matched_patterns": result.matched_patterns,
+            "pattern_matched": (len(result.matched_patterns) > 0),
         } if result.intent else {
             "label": "unavailable", "confidence": 0.0, "adversarial_score": 0.0,
             "adversarial_pct": "0.0%", "threat_score": result.threat_score,
             "threat_pct": f"{result.threat_score:.1%}", "blocking_layer": result.blocking_layer,
+            "matched_patterns": [], "pattern_matched": False,
         }
 
         telemetry_data = {
