@@ -58,14 +58,14 @@
     --font:      'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
 
-    /* Radii */
-    --r-2:  2px;
-    --r-4:  4px;
-    --r-6:  6px;
-    --r-8:  8px;
-    --r-10: 10px;
-    --r-12: 12px;
-    --r-16: 16px;
+    /* Radii - Spatial UI */
+    --r-2:  4px;
+    --r-4:  8px;
+    --r-6:  12px;
+    --r-8:  16px;
+    --r-10: 24px;
+    --r-12: 32px;
+    --r-16: 40px;
 
     /* Easing */
     --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
@@ -136,12 +136,12 @@ body {
     position: absolute;
     inset: 0;
     background: radial-gradient(
-        550px circle at var(--mouse-x, 50%) var(--mouse-y, 45%),
-        rgba(34, 197, 94, 0.08) 0%,
-        rgba(59, 130, 246, 0.05) 40%,
+        600px circle at var(--mouse-x, 50%) var(--mouse-y, 45%),
+        rgba(139, 92, 246, 0.15) 0%,
+        rgba(59, 130, 246, 0.1) 30%,
         transparent 80%
     );
-    opacity: 0.95;
+    opacity: 1;
     mix-blend-mode: screen;
     pointer-events: none;
     will-change: background;
@@ -175,8 +175,8 @@ body {
     inset: 0;
     background: radial-gradient(
         ellipse 90% 85% at 50% 45%,
-        rgba(6, 7, 9, 0.38) 0%,
-        rgba(6, 7, 9, 0.75) 60%,
+        rgba(6, 7, 9, 0.1) 0%,
+        rgba(6, 7, 9, 0.5) 60%,
         #060709 100%
     );
     pointer-events: none;
@@ -203,13 +203,18 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    height: 56px;
-    border-bottom: 1px solid var(--border-1);
+    height: 64px;
+    border: 1px solid var(--border-1);
+    border-top-color: rgba(255, 255, 255, 0.15);
+    border-radius: var(--r-10);
+    margin: 16px 0;
+    padding: 0 20px;
     flex-shrink: 0;
     gap: 12px;
-    background: rgba(10, 11, 14, 0.7);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    background: rgba(25, 25, 30, 0.35);
+    backdrop-filter: blur(48px) saturate(150%);
+    -webkit-backdrop-filter: blur(48px) saturate(150%);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* Brand */
@@ -326,35 +331,39 @@ body {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    background: transparent;
-    border: 1px solid var(--border-1);
-    color: var(--text-2);
-    padding: 5px 10px;
-    border-radius: var(--r-6);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--text-1);
+    padding: 6px 14px;
+    border-radius: 99px;
     font-size: 12.5px;
     font-weight: 500;
     cursor: pointer;
-    transition: var(--t-base);
+    transition: all var(--t-base);
     font-family: var(--font);
     white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .nav-btn:hover {
-    background: var(--surface-4);
-    border-color: var(--border-2);
-    color: var(--text-1);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
 }
 
 .nav-btn-primary {
-    background: var(--blue-dim);
-    border-color: var(--blue-border);
-    color: var(--blue-light);
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-top: 1px solid rgba(147, 197, 253, 0.5);
+    color: #93c5fd;
 }
 
 .nav-btn-primary:hover {
-    background: rgba(59,130,246,0.16);
-    border-color: rgba(59,130,246,0.4);
-    color: #93c5fd;
+    background: rgba(59, 130, 246, 0.25);
+    border-color: rgba(96, 165, 250, 0.5);
+    color: #fff;
 }
 
 .badge-count {
@@ -386,13 +395,15 @@ body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    background: rgba(14, 14, 18, 0.76);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--border-1);
-    box-shadow: 0 16px 48px -12px rgba(0, 0, 0, 0.55);
+    background: rgba(18, 18, 22, 0.45);
+    backdrop-filter: blur(64px) saturate(180%);
+    -webkit-backdrop-filter: blur(64px) saturate(180%);
+    border: 1px solid var(--border-2);
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 32px 64px -16px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
     border-radius: var(--r-12);
     overflow: hidden;
+    margin-bottom: 16px;
 }
 
 /* --------------------------------------------------------------------------
@@ -597,24 +608,29 @@ body {
 
 .message-bubble {
     max-width: 72%;
-    padding: 9px 13px;
-    border-radius: var(--r-10);
+    padding: 12px 16px;
+    border-radius: var(--r-8);
     font-size: 13.5px;
     line-height: 1.65;
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
 }
 
 .message-user .message-bubble {
-    background: rgba(59,130,246,0.09);
-    border: 1px solid rgba(59,130,246,0.2);
-    border-bottom-right-radius: var(--r-4);
+    background: rgba(59, 130, 246, 0.15);
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    border-top: 1px solid rgba(147, 197, 253, 0.3);
+    border-bottom-right-radius: var(--r-2);
     color: #dde9ff;
     max-width: 58%;
 }
 
 .message-assistant .message-bubble {
-    background: var(--surface-2);
-    border: 1px solid var(--border-1);
-    border-bottom-left-radius: var(--r-4);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    border-bottom-left-radius: var(--r-2);
     color: var(--text-1);
 }
 
@@ -734,12 +750,12 @@ body {
    Chat Input Area
    -------------------------------------------------------------------------- */
 .chat-input-container {
-    padding: 10px 14px 12px;
-    border-top: 1px solid var(--border-0);
-    background: var(--surface-2);
+    padding: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(10, 10, 12, 0.2);
     display: flex;
     flex-direction: column;
-    gap: 7px;
+    gap: 12px;
 }
 
 /* Attached RAG banner */
@@ -1001,10 +1017,13 @@ body {
     display: flex;
     align-items: flex-end;
     gap: 8px;
-    background: var(--surface-3);
-    border: 1px solid var(--border-1);
+    background: rgba(30, 30, 35, 0.4);
+    backdrop-filter: blur(24px) saturate(150%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    border: 1px solid var(--border-2);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: var(--r-10);
-    padding: 8px 10px;
+    padding: 12px;
     transition: border-color var(--t-fast), box-shadow var(--t-fast);
 }
 
@@ -1101,21 +1120,24 @@ body {
 
 .inspector-drawer {
     position: fixed;
-    top: 0;
-    right: 0;
+    top: 16px;
+    right: 16px;
     width: 480px;
-    max-width: 92vw;
-    height: 100vh;
-    background: rgba(14, 14, 18, 0.88);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border-left: 1px solid var(--border-2);
+    max-width: calc(100vw - 32px);
+    height: calc(100vh - 32px);
+    background: rgba(18, 18, 22, 0.35);
+    backdrop-filter: blur(80px) saturate(180%);
+    -webkit-backdrop-filter: blur(80px) saturate(180%);
+    border: 1px solid var(--border-2);
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--r-12);
     z-index: 100;
-    transform: translateX(calc(100% + 20px));
+    transform: translateX(calc(100% + 40px));
     transition: transform var(--t-panel);
     display: flex;
     flex-direction: column;
-    box-shadow: -20px 0 56px rgba(0,0,0,0.65);
+    box-shadow: -32px 0 64px -16px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.1);
 }
 
 .inspector-drawer.active { transform: translateX(0); }
@@ -1567,13 +1589,13 @@ body {
 .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.6);
+    background: rgba(0, 0, 0, 0.4);
     z-index: 110;
     opacity: 0;
     pointer-events: none;
     transition: opacity var(--t-panel);
-    backdrop-filter: blur(3px);
-    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
 }
 
 .modal-overlay.active { opacity: 1; pointer-events: auto; }
@@ -1586,14 +1608,15 @@ body {
     width: 540px;
     max-width: 92vw;
     max-height: 86vh;
-    background: rgba(14, 14, 18, 0.92);
-    backdrop-filter: blur(28px);
-    -webkit-backdrop-filter: blur(28px);
+    background: rgba(18, 18, 22, 0.45);
+    backdrop-filter: blur(80px) saturate(180%);
+    -webkit-backdrop-filter: blur(80px) saturate(180%);
     border: 1px solid var(--border-2);
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: var(--r-12);
     box-shadow:
-        0 0 0 1px rgba(255,255,255,0.06),
-        0 24px 64px rgba(0,0,0,0.75);
+        0 32px 64px -16px rgba(0,0,0,0.6),
+        inset 0 1px 0 rgba(255,255,255,0.1);
     z-index: 115;
     opacity: 0;
     pointer-events: none;
@@ -2032,3 +2055,27 @@ body {
     box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
+/* ── Threat Ripple Animation ── */
+.threat-ripple-effect {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  background: rgba(239, 68, 68, 0.5);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: ripple-pulse 0.8s ease-out forwards;
+  pointer-events: none;
+  z-index: 100;
+}
+
+@keyframes ripple-pulse {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(80); opacity: 0; }
+}
+
+body.threat-active .cyber-bg-spotlight {
+  background: radial-gradient(800px circle at var(--mouse-x, 50%) var(--mouse-y, 45%), rgba(239, 68, 68, 0.45) 0%, transparent 80%) !important;
+  transition: background 0.1s ease;
+}

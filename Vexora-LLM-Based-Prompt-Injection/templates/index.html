@@ -11,6 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -347,6 +348,9 @@
                         <div class="threat-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
                             <div class="threat-progress-fill" id="step2-score-bar" style="width:0%"></div>
                         </div>
+                        <div style="width: 100%; height: 180px; margin-top: 10px;">
+                            <canvas id="intent-radar-chart"></canvas>
+                        </div>
                     </div>
                     <div class="telemetry-grid mt-sm">
                         <div class="telemetry-item">
@@ -474,6 +478,21 @@
                     <input type="checkbox" id="toggle-intent" checked>
                     <span class="switch-slider"></span>
                 </label>
+            </div>
+        </div>
+        
+        <div class="form-section defense-params" style="margin-top: 20px;">
+            <h4 class="params-title"><i class="fa-solid fa-brain" aria-hidden="true"></i> ML Classifier Updates</h4>
+            <p class="form-hint">Download latest adversarial datasets from HuggingFace and retrain the Layer 2 intent classifier live. Hot-swaps the model without server restart.</p>
+            
+            <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 10px;">
+                <button class="btn-save-modal" id="btn-retrain-model" type="button" style="background: rgba(139, 92, 246, 0.2); color: #c4b5fd; border-color: rgba(139, 92, 246, 0.4); width: fit-content;">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> Sync & Retrain Model
+                </button>
+                <div id="training-status-box" style="display: none; font-size: 12px; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); color: #cbd5e1;">
+                    <div id="training-spinner" style="margin-bottom: 8px;"><i class="fa-solid fa-circle-notch fa-spin"></i> Downloading datasets & training (this may take ~15-30s)...</div>
+                    <div id="training-results" style="display: none;"></div>
+                </div>
             </div>
         </div>
 
