@@ -1,12 +1,15 @@
 import os
 import sys
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PKG_DIR = os.path.join(BASE_DIR, "Vexora-LLM-Based-Prompt-Injection")
-if PKG_DIR not in sys.path:
-    sys.path.insert(0, PKG_DIR)
+# Ensure project root directory is in sys.path
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
-# Change directory so relative paths (like static/) work properly
-os.chdir(PKG_DIR)
-
+# Import the configured Flask application instance
 from app import app
+
+# Vercel WSGI entry point (callable 'app')
+if __name__ == "__main__":
+    app.run(debug=True)
