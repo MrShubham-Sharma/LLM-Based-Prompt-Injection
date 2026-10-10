@@ -116,6 +116,24 @@ _INSTRUCTION_OVERRIDE_PATTERNS = [
         "Unicode escape or percent-encoding sequences that may smuggle "
         "instructions past naive string filters.",
     ),
+    (
+        "privilege_escalation",
+        re.compile(
+            r"\b(i\s+am\s+your\s+(administrator|developer|creator)|enter\s+(debug|admin|root)\s+mode|disable\s+(filters|safety|moderation))\b",
+            re.IGNORECASE,
+        ),
+        Severity.HIGH,
+        "Attempting to escalate privileges by claiming administrative status.",
+    ),
+    (
+        "output_format_manipulation",
+        re.compile(
+            r"\b(start\s+your\s+response\s+with|always\s+respond\s+with|begin\s+your\s+answer\s+with)\b.{0,30}\b(sure|absolutely|here\s+is|yes)\b",
+            re.IGNORECASE,
+        ),
+        Severity.HIGH,
+        "Attempting to force an affirmative response format to bypass safety refusal.",
+    ),
 ]
 
 

@@ -68,9 +68,15 @@ class SecureLLMProxy:
         user_input: str,
         tool_context: Optional[List[ContextBlock]] = None,
     ) -> PipelineResult:
+        # Gather all untrusted input (User Prompt + RAG/Tool Context)
+        untrusted_texts = [user_input]
+        if tool_context:
+            untrusted_texts.extend([block.content for block in tool_context])
+        combined_untrusted = "\n".join(untrusted_texts)
+
         # --- Layer 1: Input Sanitization -----------------------------
         sanitization = sanitize(
-            user_input, block_on_high_severity=self.block_on_sanitizer_high_severity
+            combined_untrusted, block_on_high_severity=self.block_on_sanitizer_high_severity
         )
         if sanitization.blocked:
             high_sev = [f.rule_name for f in sanitization.findings]
@@ -97,15 +103,29 @@ class SecureLLMProxy:
             )
 
         # --- Layer 3: Dual-Context Encapsulation ----------------------
+        # Clean the pieces individually before encapsulation
+        clean_user = sanitize(user_input, block_on_high_severity=False).cleaned_text
+        clean_tool = None
+        if tool_context:
+            clean_tool = []
+            for block in tool_context:
+                clean_tool.append(
+                    ContextBlock(
+                        trust_level=block.trust_level,
+                        content=sanitize(block.content, block_on_high_severity=False).cleaned_text,
+                        source=block.source
+                    )
+                )
+
         final_prompt = self._context_builder.build(
             system_rules=self.system_rules,
-            user_input=sanitization.cleaned_text,
-            tool_context=tool_context,
+            user_input=clean_user,
+            tool_context=clean_tool,
         )
         structured_messages = self._context_builder.build_structured_messages(
             system_rules=self.system_rules,
-            user_input=sanitization.cleaned_text,
-            tool_context=tool_context,
+            user_input=clean_user,
+            tool_context=clean_tool,
         )
 
         return PipelineResult(

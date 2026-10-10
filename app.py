@@ -45,6 +45,22 @@ except Exception as e:
 # ---------------------------------------------------------------------------
 # CORS — allow browser extensions (chrome-extension://*) to call local Flask
 # ---------------------------------------------------------------------------
+@app.route("/api/report_attack", methods=["POST"])
+def report_attack():
+    """
+    Active Feedback Loop: Allows users/admins to report a new zero-day prompt injection
+    that bypassed the filters. It saves it to a local feedback file, 
+    so the ML model can learn this new pattern on the next retrain.
+    """
+    data = request.json or {}
+    missed_prompt = data.get("prompt", "").strip()
+    if missed_prompt:
+        feedback_file = os.path.join(BASE_DIR, "feedback_adversarial.txt")
+        with open(feedback_file, "a", encoding="utf-8") as f:
+            f.write(missed_prompt.replace("\n", " ") + "\n")
+        return jsonify({"status": "ok", "message": "Feedback recorded for next training cycle."}), 200
+    return jsonify({"status": "error", "message": "No prompt provided."}), 400
+
 @app.after_request
 def add_cors_headers(response):
     origin = request.headers.get("Origin", "")

@@ -182,10 +182,20 @@ def load_seed_data() -> pd.DataFrame:
     """Load built-in seed samples as a DataFrame."""
     if pd is None:
         raise RuntimeError("pandas is required for model retraining: pip install pandas")
-    texts = SEED_ADVERSARIAL + SEED_BENIGN
-    labels = [1] * len(SEED_ADVERSARIAL) + [0] * len(SEED_BENIGN)
+    
+    # Load dynamic feedback if available (Active Learning)
+    feedback_file = ROOT / "feedback_adversarial.txt"
+    dynamic_adversarial = []
+    if feedback_file.exists():
+        with open(feedback_file, "r", encoding="utf-8") as f:
+            dynamic_adversarial = [line.strip() for line in f if line.strip()]
+            if dynamic_adversarial:
+                print(f"  [feedback loop] Loaded {len(dynamic_adversarial)} zero-day attacks from feedback.")
+
+    texts = SEED_ADVERSARIAL + dynamic_adversarial + SEED_BENIGN
+    labels = [1] * (len(SEED_ADVERSARIAL) + len(dynamic_adversarial)) + [0] * len(SEED_BENIGN)
     df = pd.DataFrame({"text": texts, "label": labels, "source": "seed"})
-    print(f"  [seed]  {len(SEED_ADVERSARIAL)} adversarial  |  {len(SEED_BENIGN)} benign")
+    print(f"  [seed]  {len(SEED_ADVERSARIAL) + len(dynamic_adversarial)} adversarial  |  {len(SEED_BENIGN)} benign")
     return df
 
 
